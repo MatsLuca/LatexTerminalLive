@@ -16,21 +16,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var liveModeTimer: Timer?
     private var isManuallyHidden = false
     
+    private var mouseMonitor: Any?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Force app to be an accessory (menu bar only)
         NSApp.setActivationPolicy(.accessory)
-        
         setupStatusItem()
-        
-        // Check for Accessibility permissions (required for global hotkeys)
         checkAccessibilityPermissions()
-        
-        // Screen capture permissions
         screenCaptureManager.requestPermissions { _ in }
-        
         self.setupHotkey()
         
-        // Observe Settings for Live Mode
+        setupMouseMonitoring()
+        
         settings.$isLiveModeEnabled
             .sink { [weak self] isEnabled in
                 if isEnabled {
@@ -44,7 +40,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             
         settings.$updateInterval
             .sink { [weak self] _ in
-                // Restart timer if running to apply new interval
                 if self?.settings.isLiveModeEnabled == true {
                     self?.startLiveMode()
                 }
@@ -54,9 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
         if let button = statusItem?.button {
-            // Prefer custom icon asset if exists
             if let customIcon = NSImage(named: "MenuBarIcon") {
                 customIcon.isTemplate = true
                 customIcon.size = NSSize(width: 18, height: 18)
@@ -87,9 +80,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func checkAccessibilityPermissions() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let isTrusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
-        
         if !isTrusted {
-            print("⚠️ WARNING: Global Hotkeys will NOT work until you grant Accessibility permissions in System Settings!")
+            print("⚠️ WARNING: Global Hotkeys and Click-to-Copy will NOT work until you grant Accessibility permissions!")
         }
     }
     
@@ -103,43 +95,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var trackedWindowID: CGWindowID?
     private var trackingTimer: Timer?
     
-    // ... setupStatusItem and other methods ...
-    
     private func handleHotkey() {
-        print("DEBUG: Hotkey Handler triggered")
-        
         if let window = overlayWindow, window.isVisible {
             isManuallyHidden = true
             stopTracking()
             window.orderOut(nil)
-            print("DEBUG: Overlay manually hidden")
             return
         }
-        
         isManuallyHidden = false
         performCapture(isAutoUpdate: false)
     }
     
     private func performCapture(isAutoUpdate: Bool) {
-        if isAutoUpdate && isManuallyHidden {
-            return
-        }
-        
+        if isAutoUpdate && isManuallyHidden { return }
         let startTime = CFAbsoluteTimeGetCurrent()
-        
         Task {
             let (items, windowFrame, windowID, theme) = await screenCaptureManager.captureGhosttyAndProcess()
-            
             let duration = CFAbsoluteTimeGetCurrent() - startTime
-            
             await MainActor.run {
                 self.settings.lastProcessingTime = duration
-                
-                if items.isEmpty {
-                    print("DEBUG: No items found to display")
-                    return
-                }
-                
+                if items.isEmpty { return }
                 self.trackedWindowID = windowID
                 showOverlay(with: items, over: windowFrame, theme: theme)
                 startTracking()
@@ -174,9 +149,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     if overlay.frame != appKitFrame {
                         overlay.setFrame(appKitFrame, display: true)
                     }
-                    
-                    // Maintain Z-order: Only pull to front if Ghostty is the active app
-                    // This allows other apps to cover the overlay when they are in front.
                     if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty" {
                         overlay.orderFrontRegardless()
                     }
@@ -189,8 +161,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func showOverlay(with items: [RecognizedTextItem], over frame: CGRect, theme: AppTheme) {
         let appKitFrame = CoordinateTransform.sckFrameToAppKit(frame)
-        
-        // Update the persistent ViewModel instead of recreating the view
         overlayViewModel.update(items: items, theme: theme, frame: appKitFrame)
         
         if overlayWindow == nil {
@@ -200,29 +170,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         overlayWindow?.show(over: appKitFrame)
-        
-        // Only force to front if Ghostty is active
         if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty" {
             overlayWindow?.orderFrontRegardless()
         }
     }
     
     private func startLiveMode() {
-        print("DEBUG: Starting Live Mode with interval \(settings.updateInterval)")
         stopLiveMode()
         liveModeTimer = Timer.scheduledTimer(withTimeInterval: settings.updateInterval, repeats: true) { [weak self] _ in
-            // Only trigger if we are not already tracking/showing something?
-            // "Live Mode" implies we keep scanning.
-            // If the user moves the window, tracking handles it.
-            // But we need to refresh the CONTENT.
-            // So yes, re-capture.
-            // self?.triggerManualCapture() // This would toggle!
             self?.performCapture(isAutoUpdate: true)
         }
     }
     
     private func stopLiveMode() {
-        print("DEBUG: Stopping Live Mode")
         liveModeTimer?.invalidate()
         liveModeTimer = nil
     }
@@ -231,17 +191,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil {
             let settingsView = SettingsView(settings: settings)
             let hostingController = NSHostingController(rootView: settingsView)
-            
             let window = NSWindow(contentViewController: hostingController)
             window.title = "Preferences"
             window.styleMask = [.titled, .closable]
             window.center()
             window.isReleasedWhenClosed = false
-            
             settingsWindow = window
         }
-        
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    // MARK: - Click-to-Copy Implementation
+    
+    private func setupMouseMonitoring() {
+        // Monitor global mouse clicks. Requires Accessibility permissions.
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            self?.handleGlobalClick(event)
+        }
+    }
+    
+    private func handleGlobalClick(_ event: NSEvent) {
+        // 1. Only care if Ghostty is the active app and overlay is visible
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty",
+              let overlay = overlayWindow, overlay.isVisible else { return }
+        
+        // 2. Get mouse location relative to the overlay window
+        let screenPoint = NSEvent.mouseLocation
+        let windowFrame = overlay.frame
+        
+        // Check if click is inside the window at all
+        guard windowFrame.contains(screenPoint) else { return }
+        
+        // 3. Convert to normalized coordinates (0.0 to 1.0)
+        // vision coordinates origin is bottom-left, screen coordinates origin is bottom-left.
+        let localX = (screenPoint.x - windowFrame.origin.x) / windowFrame.size.width
+        let localY = (screenPoint.y - windowFrame.origin.y) / windowFrame.size.height
+        let normalizedPoint = CGPoint(x: localX, y: localY)
+        
+        // 4. Check against all math fragments
+        for item in overlayViewModel.items {
+            for fragment in item.mathFragments {
+                // Fragment boundingBox is also bottom-left (Vision default)
+                if fragment.boundingBox.contains(normalizedPoint) {
+                    copyToClipboard(fragment.text, id: fragment.id)
+                    return // Only handle one click
+                }
+            }
+        }
+    }
+    
+    private func copyToClipboard(_ text: String, id: UUID) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        
+        // Trigger visual feedback in the overlay
+        overlayViewModel.triggerCopiedFeedback(for: id)
+        print("[AppDelegate] Copied to clipboard: \(text)")
     }
 }

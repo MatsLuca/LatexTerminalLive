@@ -5,6 +5,7 @@ class OverlayViewModel: ObservableObject {
     @Published var items: [RecognizedTextItem] = []
     @Published var theme: AppTheme = AppTheme(backgroundColor: .black, foregroundColor: .white)
     @Published var windowFrame: CGRect = .zero
+    @Published var copiedId: UUID? = nil
     
     func update(items newItems: [RecognizedTextItem], theme: AppTheme, frame: CGRect) {
         // Build the final list of items, preserving stability for existing ones
@@ -21,7 +22,6 @@ class OverlayViewModel: ObservableObject {
             }
         }
         
-        // Deep compare theme and items count to avoid redundant animations
         let itemsChanged = stabilizedItems.map { $0.id } != self.items.map { $0.id }
         let themeChanged = theme.backgroundColor != self.theme.backgroundColor ||
                            theme.foregroundColor != self.theme.foregroundColor
@@ -31,6 +31,21 @@ class OverlayViewModel: ObservableObject {
                 self.items = stabilizedItems
                 self.theme = theme
                 self.windowFrame = frame
+            }
+        }
+    }
+    
+    func triggerCopiedFeedback(for id: UUID) {
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+            self.copiedId = id
+        }
+        
+        // Auto-hide feedback after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if self.copiedId == id {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.copiedId = nil
+                }
             }
         }
     }

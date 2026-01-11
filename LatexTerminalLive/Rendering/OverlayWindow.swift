@@ -11,17 +11,17 @@ class OverlayWindow: NSPanel {
         )
         
         self.isFloatingPanel = true
-        self.level = .normal // Same level as terminal to allow being covered
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary] // Move with spaces and show over fullscreen
+        self.level = .normal // Back to normal level to stay with terminal
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.backgroundColor = .clear
         self.isOpaque = false
         self.hasShadow = false
-        self.ignoresMouseEvents = true
+        self.ignoresMouseEvents = true // Pass all events to terminal below
         self.contentView = contentView
     }
     
     override var canBecomeKey: Bool {
-        return false // Stay non-interactive
+        return false
     }
     
     override var canBecomeMain: Bool {
