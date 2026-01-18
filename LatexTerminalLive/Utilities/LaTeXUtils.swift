@@ -32,6 +32,11 @@ enum LaTeXUtils {
         // Fix accidental spaces after backslash: "\ sum" -> "\sum"
         cleaned = cleaned.replacingOccurrences(of: "\\ ", with: "\\")
         
+        // Remove leading/trailing spaces inside math delimiters if present
+        // (Note: delimiters are usually kept by the detector)
+        if cleaned.hasPrefix("$ ") { cleaned = "$" + cleaned.dropFirst(2) }
+        if cleaned.hasSuffix(" $") { cleaned = String(cleaned.dropLast(2)) + "$" }
+        
         // Fix doubled letters from OCR stuttering (e.g. \sqrtt)
         cleaned = cleaned.replacingOccurrences(of: "\\sqrtt", with: "\\sqrt")
         cleaned = cleaned.replacingOccurrences(of: "\\summm", with: "\\sum")
@@ -61,7 +66,63 @@ enum LaTeXUtils {
             let range = NSRange(location: 0, length: nsString.length)
             cleaned = looseEnvRegex.stringByReplacingMatches(in: cleaned, options: [], range: range, withTemplate: "\\\\$1{$2}")
         }
+
+        // D. German Decimal Separator Fix
+        // Fixes "16f,}6", "16, 6", "16{,} 6", "161,}6", "1{,366", "1£,}66" -> "16{,}6" (or equivalent)
+        // Corrects artifacts where the last digit or symbol is actually the comma's tail.
+        if let decimalRegex = try? NSRegularExpression(pattern: "(\\d+?)([fsl1£]?)\\s*(?:,\\s*\\}?|\\{,\\}|\\{?,?\\s*\\}|\\{?,|\\{?,\\s*\\d*\\})\\s*[3]?(\\d+)", options: []) {
+            let nsString = cleaned as NSString
+            cleaned = decimalRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1{,}$3")
+        }
         
+        // E. \text Command Formatting Fix
+        // Repair \text with missing or malformed braces around units.
+        // Drops common OCR artifacts like 'f', 's', 'l' at the start of units (e.g. \text{ f}s} -> \text{ s}).
+        // Also ensures unit space behavior and handles superscripts (e.g. \text s}^{-1} -> \text{ s}^{-1}).
+        if let textUnitRegex = try? NSRegularExpression(pattern: "\\\\text\\s*\\{?\\s*(?:[fsl1]?\\s*)?([^{}\\s=<>]+)\\s*\\}?\\s*(\\^\\{?[^\\s\\}]+\\}?)?", options: []) {
+            let nsString = cleaned as NSString
+            cleaned = textUnitRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{ $1}$2")
+        }
+
+        // F. \frac Transition & Brace Fix
+        // 1. Fixes common OCR artifacts inside or around \frac
+        if cleaned.contains("\\frac") {
+            // Fix "fo" or "fo}" misread as "0"
+            cleaned = cleaned.replacingOccurrences(of: "{fo}", with: "{0}")
+            cleaned = cleaned.replacingOccurrences(of: "fo}", with: "0}")
+            cleaned = cleaned.replacingOccurrences(of: "fo ", with: "0 ")
+            
+            // Fix split arguments: "\frac{0} - 33}{" -> "\frac{0 - 33}{"
+            cleaned = cleaned.replacingOccurrences(of: "} - ", with: " - ")
+            cleaned = cleaned.replacingOccurrences(of: "}-", with: "-")
+            
+            // Handle \frac followed by a minus without brace
+            cleaned = cleaned.replacingOccurrences(of: "\\frac -", with: "\\frac{0 -")
+            cleaned = cleaned.replacingOccurrences(of: "\\frac - ", with: "\\frac{0 - ")
+            cleaned = cleaned.replacingOccurrences(of: "\\frac-", with: "\\frac{-")
+        }
+
+        // 2. Fixes missing opening brace before the transition: "\frac 33}{" -> "\frac{33}{"
+        // Also handles "\frac -33}{" -> "\frac{-33}{"
+        if let fracMissingOpenBrace = try? NSRegularExpression(pattern: "\\\\frac\\s*([^{}\\s][^\\}]*)\\}", options: []) {
+            let nsString = cleaned as NSString
+            cleaned = fracMissingOpenBrace.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\frac{$1}")
+        }
+
+        // 3. Fixes malformed transitions between arguments: "01{10" -> "0}{10"
+        if let fracTransitionRegex = try? NSRegularExpression(pattern: "(\\d)[1Il]\\s*\\{", options: []) {
+            let nsString = cleaned as NSString
+            cleaned = fracTransitionRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1}{")
+        }
+
+        // 4. Fixes "\frac{A}-{B}" -> "\frac{A}{B}"
+        if let fracSepRegex = try? NSRegularExpression(pattern: "([-])\\s*\\{", options: []) {
+            if cleaned.contains("\\frac") {
+                cleaned = cleaned.replacingOccurrences(of: "-{", with: "}{")
+                cleaned = cleaned.replacingOccurrences(of: "- {", with: "}{")
+            }
+        }
+
         // -------------------------------------
         
         // 2. Fuzzy Command Correction
@@ -80,9 +141,18 @@ enum LaTeXUtils {
             }
         }
         
-        // 4. Ensure balanced braces (Simple heuristic)
-        let openBraces = cleaned.filter { $0 == "{" }.count
-        let closeBraces = cleaned.filter { $0 == "}" }.count
+        // 4. Ensure balanced braces
+        var openBraces = cleaned.filter { $0 == "{" }.count
+        var closeBraces = cleaned.filter { $0 == "}" }.count
+        
+        // If too many closing braces at the very end, remove them aggressively
+        // Often OCR adds extra }} to the end of math blocks.
+        while closeBraces > openBraces && cleaned.hasSuffix("}") {
+            cleaned.removeLast()
+            closeBraces -= 1
+        }
+        
+        // Final sanity check: if we still have unbalanced braces, try to fix them
         if openBraces > closeBraces {
             cleaned += String(repeating: "}", count: openBraces - closeBraces)
         }

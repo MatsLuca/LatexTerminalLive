@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-01-18
+
+### Added
+- **German Decimal Separator Heuristic**: Advanced correction for OCR artifacts around German decimal commas (e.g., `16f,}6` -> `16{,}6`).
+- **`\text` Command Repair**: Intelligent formatting of `\text` commands, ensuring proper unit spacing and handling common misread characters.
+- **`\frac` Structural Fixes**: Added robust repair logic for malformed fractions, including missing opening braces and incorrect argument transitions.
+- **Aggressive Bracing Balancing**: Enhanced logic to remove trailing OCR artifacts like redundant closing braces.
+
 ## [0.3.0] - 2026-01-18
 
 ### Added
