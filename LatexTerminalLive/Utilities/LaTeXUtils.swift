@@ -77,23 +77,18 @@ enum LaTeXUtils {
         
         // E. ULTRATHINK: German Engineering Label & Unit Repair
         // 1. Repair German labels inside \text or in subscripts
-        // common engineering subscripts: neu, alt, ges, zul, erf, vorh, res, tats
-        let germanLabels = ["neu", "alt", "ges", "zul", "erf", "vorh", "res", "tats"]
+        // common engineering subscripts: neu, alt, ges, zul, erf, vorh, res, tats, kin, pot, tot
+        let germanLabels = ["neu", "alt", "ges", "zul", "erf", "vorh", "res", "tats", "kin", "pot", "tot"]
         for label in germanLabels {
             let labelPattern: String
             switch label {
-            case "neu": 
-                // Matches n e u, n u, \nu, \ n u, etc.
-                labelPattern = "(?:\\\\\\\\?\\\\s*)?n?\\\\s*e?\\\\s*u"
-            case "alt": 
-                // Matches a l t, a 1 t, a t, \alt, etc.
-                labelPattern = "(?:\\\\\\\\?\\\\s*)?a\\\\s*[ne il1]?\\\\s*[ti]"
-            case "ges": 
-                labelPattern = "(?:\\\\\\\\?\\\\s*)?g\\\\s*e\\\\s*s"
-            case "zul": 
-                labelPattern = "(?:\\\\\\\\?\\\\s*)?z\\\\s*u\\\\s*[il1e]"
-            default: 
-                labelPattern = "(?:\\\\\\\\?\\\\s*)?\(label)"
+            case "neu": labelPattern = #"(?:\\+\s*(?:n\s*u|e\s*u)|n\s*e\s*u|n\s*u)(?![a-z])"#
+            case "alt": labelPattern = #"(?:\\+\s*a\s*t|a\s*(?:l|1|i)?\s*t)(?![a-z])"#
+            case "ges": labelPattern = #"(?:\\+\s*g\s*e\s*s|g\s*e\s*s)(?![a-z])"#
+            case "zul": labelPattern = #"(?:\\+\s*z\s*u\s*[il1e]|z\s*u\s*[il1e])(?![a-z])"#
+            case "kin": labelPattern = #"(?:\\+\s*i\s*n|k\s*i?\s*n|i\s*n)(?![a-z])"#
+            case "pot": labelPattern = #"(?:\\+\s*p\s*o\s*t|p\s*o\s*t)(?![a-z])"#
+            default: labelPattern = #"(?:\\+)?\s*\#(label)(?![a-z])"#
             }
             
             // Fix inside \text{...}
@@ -102,10 +97,17 @@ enum LaTeXUtils {
                 cleaned = textLabelRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{\(label)}")
             }
             
-            // Fix in subscripts _{...} or _...
-            if let subLabelRegex = try? NSRegularExpression(pattern: "_\\s*\\{\\s*\(labelPattern)\\s*\\}", options: .caseInsensitive) {
+            // Fix in subscripts _{...}
+            // Broaden to catch ANY suffix (comma, number, space) and preserve it.
+            // We use a more robust pattern for the suffix to ensure it's captured correctly.
+            if let subLabelRegex = try? NSRegularExpression(pattern: #"_\s*\{\s*(\#(labelPattern))\s*(.*?)\s*\}"#, options: .caseInsensitive) {
                 let nsString = cleaned as NSString
-                cleaned = subLabelRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "_{\(label)}")
+                let matches = subLabelRegex.matches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length))
+                for match in matches.reversed() {
+                    // Group 2 is the suffix
+                    let suffix = nsString.substring(with: match.range(at: 2))
+                    cleaned = (cleaned as NSString).replacingCharacters(in: match.range, with: "_{\(label)\(suffix)}")
+                }
             }
         }
         
@@ -241,6 +243,12 @@ enum LaTeXUtils {
                 prefix = nsString.substring(with: prefixRange)
             }
             let word = nsString.substring(with: wordRange)
+            
+            // 0. Skip words that are known German labels to avoid reversals (e.g. kin -> \in)
+            let germanLabels = ["neu", "alt", "ges", "zul", "erf", "vorh", "res", "tats", "kin", "pot", "tot"]
+            if !hasPrefix && germanLabels.contains(word.lowercased()) {
+                continue
+            }
             
             // 1. Exact match with correct prefix, skip
             if hasPrefix && prefix == "\\" && knownCommands.contains(word) {
