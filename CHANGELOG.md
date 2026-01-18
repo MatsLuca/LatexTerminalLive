@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-01-18
+
+### Added
+- **ULTRATHINK: German Engineering Heuristics**: Advanced contextual repair for common subscripts and labels (`neu`, `alt`, `ges`, `zul`, etc.) inside `\text{...}` and subscripts. This specifically fixes physics-specific OCR artifacts like `\text{ \nu}` -> `\text{neu}`.
+
+## [0.3.3] - 2026-01-18
+
+### Fixed
+- **German Label Repair**: Corrected OCR misinterpretation of German labels inside `\text` commands (e.g., `\text{ \nu}` -> `\text{neu}`).
+
+## [0.3.2] - 2026-01-18
+
+### Fixed
+- **Fraction Transition Repair**: Added support for misread fraction argument separators (e.g., `){`, `}(`, `) {` -> `}{`).
+- **Trailing Artifact Removal**: Improved logic to remove extra closing braces and whitespace at the end of math blocks.
+
 ## [0.3.1] - 2026-01-18
 
 ### Added

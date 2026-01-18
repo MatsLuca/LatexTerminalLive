@@ -75,8 +75,41 @@ enum LaTeXUtils {
             cleaned = decimalRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1{,}$3")
         }
         
-        // E. \text Command Formatting Fix
-        // Repair \text with missing or malformed braces around units.
+        // E. ULTRATHINK: German Engineering Label & Unit Repair
+        // 1. Repair German labels inside \text or in subscripts
+        // common engineering subscripts: neu, alt, ges, zul, erf, vorh, res, tats
+        let germanLabels = ["neu", "alt", "ges", "zul", "erf", "vorh", "res", "tats"]
+        for label in germanLabels {
+            let labelPattern: String
+            switch label {
+            case "neu": 
+                // Matches n e u, n u, \nu, \ n u, etc.
+                labelPattern = "(?:\\\\\\\\?\\\\s*)?n?\\\\s*e?\\\\s*u"
+            case "alt": 
+                // Matches a l t, a 1 t, a t, \alt, etc.
+                labelPattern = "(?:\\\\\\\\?\\\\s*)?a\\\\s*[ne il1]?\\\\s*[ti]"
+            case "ges": 
+                labelPattern = "(?:\\\\\\\\?\\\\s*)?g\\\\s*e\\\\s*s"
+            case "zul": 
+                labelPattern = "(?:\\\\\\\\?\\\\s*)?z\\\\s*u\\\\s*[il1e]"
+            default: 
+                labelPattern = "(?:\\\\\\\\?\\\\s*)?\(label)"
+            }
+            
+            // Fix inside \text{...}
+            if let textLabelRegex = try? NSRegularExpression(pattern: "\\\\text\\s*\\{\\s*\(labelPattern)\\s*\\}", options: .caseInsensitive) {
+                let nsString = cleaned as NSString
+                cleaned = textLabelRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{\(label)}")
+            }
+            
+            // Fix in subscripts _{...} or _...
+            if let subLabelRegex = try? NSRegularExpression(pattern: "_\\s*\\{\\s*\(labelPattern)\\s*\\}", options: .caseInsensitive) {
+                let nsString = cleaned as NSString
+                cleaned = subLabelRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "_{\(label)}")
+            }
+        }
+        
+        // 2. Repair \text with missing or malformed braces around units.
         // Drops common OCR artifacts like 'f', 's', 'l' at the start of units (e.g. \text{ f}s} -> \text{ s}).
         // Also ensures unit space behavior and handles superscripts (e.g. \text s}^{-1} -> \text{ s}^{-1}).
         if let textUnitRegex = try? NSRegularExpression(pattern: "\\\\text\\s*\\{?\\s*(?:[fsl1]?\\s*)?([^{}\\s=<>]+)\\s*\\}?\\s*(\\^\\{?[^\\s\\}]+\\}?)?", options: []) {
@@ -109,7 +142,14 @@ enum LaTeXUtils {
             cleaned = fracMissingOpenBrace.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\frac{$1}")
         }
 
-        // 3. Fixes malformed transitions between arguments: "01{10" -> "0}{10"
+        // 3. Fixes malformed transitions between arguments: "01{10" -> "0}{10", "){" -> "}{"
+        if cleaned.contains("\\frac") {
+            cleaned = cleaned.replacingOccurrences(of: "){", with: "}{")
+            cleaned = cleaned.replacingOccurrences(of: ") {", with: "}{")
+            cleaned = cleaned.replacingOccurrences(of: "} (", with: "}{")
+            cleaned = cleaned.replacingOccurrences(of: "}(", with: "}{")
+        }
+        
         if let fracTransitionRegex = try? NSRegularExpression(pattern: "(\\d)[1Il]\\s*\\{", options: []) {
             let nsString = cleaned as NSString
             cleaned = fracTransitionRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1}{")
@@ -147,9 +187,16 @@ enum LaTeXUtils {
         
         // If too many closing braces at the very end, remove them aggressively
         // Often OCR adds extra }} to the end of math blocks.
-        while closeBraces > openBraces && cleaned.hasSuffix("}") {
-            cleaned.removeLast()
-            closeBraces -= 1
+        // We also check for trailing characters after the last '$' if present.
+        while closeBraces > openBraces {
+            if cleaned.hasSuffix("}") {
+                cleaned.removeLast()
+                closeBraces -= 1
+            } else if cleaned.hasSuffix(" ") {
+                cleaned.removeLast()
+            } else {
+                break
+            }
         }
         
         // Final sanity check: if we still have unbalanced braces, try to fix them
