@@ -100,7 +100,7 @@ class VisionOCR {
                 if !mathSummaries.isEmpty {
                     let fullScene = mathSummaries.joined(separator: " | ")
                     if fullScene != VisionOCR.lastLoggedText || Date().timeIntervalSince(VisionOCR.lastLogTime) > 3.0 {
-                        print("[VisionOCR] Math Scene: \(fullScene)")
+                        // print("[VisionOCR] Math Scene: \(fullScene)")
                         VisionOCR.lastLoggedText = fullScene
                         VisionOCR.lastLogTime = Date()
                     }

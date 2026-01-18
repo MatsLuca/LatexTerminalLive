@@ -26,7 +26,7 @@ struct CoordinateTransform {
             height: sckFrame.height
         )
         
-        print("DEBUG CoordinateTransform: SCK \(sckFrame) -> AppKit \(result) (Primary Height: \(primaryHeight))")
+        // print("DEBUG CoordinateTransform: SCK \(sckFrame) -> AppKit \(result) (Primary Height: \(primaryHeight))")
         return result
     }
 }

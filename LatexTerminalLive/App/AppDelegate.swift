@@ -103,21 +103,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         isManuallyHidden = false
-        performCapture(isAutoUpdate: false)
+        performCapture(isAutoUpdate: false, ignoreCache: true)
     }
     
-    private func performCapture(isAutoUpdate: Bool) {
+    private func performCapture(isAutoUpdate: Bool, ignoreCache: Bool = false) {
         if isAutoUpdate && isManuallyHidden { return }
         let startTime = CFAbsoluteTimeGetCurrent()
         Task {
-            let (items, windowFrame, windowID, theme) = await screenCaptureManager.captureGhosttyAndProcess()
+            let result = await screenCaptureManager.captureGhosttyAndProcess(ignoreCache: ignoreCache)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
+            
             await MainActor.run {
                 self.settings.lastProcessingTime = duration
-                if items.isEmpty { return }
-                self.trackedWindowID = windowID
-                showOverlay(with: items, over: windowFrame, theme: theme)
-                startTracking()
+                
+                switch result {
+                case .success(let items, let windowFrame, let windowID, let theme):
+                    if items.isEmpty { return }
+                    self.trackedWindowID = windowID
+                    showOverlay(with: items, over: windowFrame, theme: theme)
+                    startTracking()
+                    
+                case .noChange:
+                    break
+                    
+                case .failure:
+                    break
+                }
             }
         }
     }
@@ -178,7 +189,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startLiveMode() {
         stopLiveMode()
         liveModeTimer = Timer.scheduledTimer(withTimeInterval: settings.updateInterval, repeats: true) { [weak self] _ in
-            self?.performCapture(isAutoUpdate: true)
+            self?.performCapture(isAutoUpdate: true, ignoreCache: false)
         }
     }
     

@@ -6,6 +6,8 @@ LatexTerminalLive is a sleek macOS utility that provides a live LaTeX overlay fo
 
 - **Live LaTeX Overlay**: Seamlessly renders mathematical expressions over your terminal window.
 - **Ghostty Integration**: Optimized for the Ghostty terminal experience.
+- **Resource-Saving Performance**: Intelligent fingerprinting detects display changes and skips OCR when the terminal is static.
+- **Fuzzy LaTeX Correction**: Advanced recognition engine with fuzzy matching to automatically correct common OCR typos and misread commands.
 - **Global Hotkey**: Toggle or trigger capture with a customizable hotkey.
 - **Modular Architecture**: Clean separation of concerns between Screen Capture, LaTeX Recognition, and Rendering.
 - **App Sandbox**: Security-first approach with minimal required permissions.
