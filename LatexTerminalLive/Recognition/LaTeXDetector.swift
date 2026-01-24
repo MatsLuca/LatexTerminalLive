@@ -113,7 +113,7 @@ class LaTeXDetector {
         let delimiters: [LaTeXDelimiterType] = [.doubleDollar, .bracket, .parenthesis, .dollar]
         
         for type in delimiters {
-            let pattern = NSRegularExpression.escapedPattern(for: type.start)
+             _ = NSRegularExpression.escapedPattern(for: type.start)
             // We implement manual search to handle escaping correctly? 
             // Regex is easier for "find next occurrence".
             // Let's use simple search but check for escaping.

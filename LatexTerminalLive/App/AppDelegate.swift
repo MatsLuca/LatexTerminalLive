@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mouseMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        print("🚀 [AppDelegate] Application Finished Launching - Sandbox Disabled")
         NSApp.setActivationPolicy(.accessory)
         setupStatusItem()
         checkAccessibilityPermissions()
@@ -110,7 +111,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isAutoUpdate && isManuallyHidden { return }
         let startTime = CFAbsoluteTimeGetCurrent()
         Task {
-            let result = await screenCaptureManager.captureGhosttyAndProcess(ignoreCache: ignoreCache)
+            let ocrResult = await screenCaptureManager.captureGhosttyAndProcess(ignoreCache: ignoreCache)
+            let result: CaptureResult
+            
+            if settings.captureMode == .hybrid, 
+               case .success(let items, let frame, let windowID, let theme) = ocrResult {
+                
+                // ULTRATHINK: Synthesize OCR results with the high-fidelity buffer
+                if let buffer = await AutomationManager.shared.extractTextSilently() {
+                    let synthesizer = BufferSynthesizer()
+                    let synthesizedItems = synthesizer.synthesize(ocrItems: items, buffer: buffer)
+                    result = .success(items: synthesizedItems, frame: frame, windowID: windowID, theme: theme)
+                } else {
+                    result = ocrResult
+                }
+            } else if settings.captureMode == .ocr {
+                result = ocrResult
+            } else {
+                result = ocrResult
+            }
+            
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             
             await MainActor.run {
@@ -118,7 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 switch result {
                 case .success(let items, let windowFrame, let windowID, let theme):
-                    if items.isEmpty { return }
+                    // Ensure we don't block if items are empty but we still want to update state
                     self.trackedWindowID = windowID
                     showOverlay(with: items, over: windowFrame, theme: theme)
                     startTracking()
@@ -127,6 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     break
                     
                 case .failure:
+                    // Optionally hide overlay on repeated failures?
                     break
                 }
             }
@@ -245,20 +266,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             for fragment in item.mathFragments {
                 // Fragment boundingBox is also bottom-left (Vision default)
                 if fragment.boundingBox.contains(normalizedPoint) {
-                    copyToClipboard(fragment.text, id: fragment.id)
+                    copyCorrectionPromptToClipboard(latex: fragment.text, context: item.text, id: fragment.id)
                     return // Only handle one click
                 }
             }
         }
     }
     
-    private func copyToClipboard(_ text: String, id: UUID) {
+    private func copyCorrectionPromptToClipboard(latex: String, context: String, id: UUID) {
+        let prompt = """
+        ### LaTeX OCR Correction Request
+        **Context:** \(context)
+        **Detected:** \(latex)
+
+        **Task:**
+        1. Identifiziere den beabsichtigten mathematischen Ausdruck.
+        2. Korrigiere den LaTeX-Code (nur das Ergebnis).
+        3. Analysiere kurz den OCR-Fehler (warum hielt cleanOCRLaTeX das für richtig?).
+        4. Schlage eine konkrete Ergänzung/Regex für LaTeXUtils.swift vor.
+        5. Falls das Fragment zu zerstört ist, um es sicher zu korrigieren: Melde dich und frage nach dem beabsichtigten Ausdruck.
+
+        *Hinweis: Bitte fass dich kurz. Fokus auf Präzision.*
+        """
+        
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        pasteboard.setString(prompt, forType: .string)
         
         // Trigger visual feedback in the overlay
         overlayViewModel.triggerCopiedFeedback(for: id)
-        print("[AppDelegate] Copied to clipboard: \(text)")
+        print("[AppDelegate] Copied correction prompt to clipboard: \(latex)")
     }
 }

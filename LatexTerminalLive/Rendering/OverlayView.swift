@@ -40,7 +40,7 @@ struct OverlayView: View {
                             .frame(width: width + 50, height: renderHeight)
                             
                             if viewModel.copiedId == fragment.id {
-                                Text("Copied!")
+                                Text("Copied Correction Prompt!")
                                     .font(.system(size: 10, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 6)

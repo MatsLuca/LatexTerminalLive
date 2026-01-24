@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-21
+
+### Added
+- **Native AX Extraction**: Enabled direct Accessibility API integration for Ghostty. This allows for silent, non-intrusive text extraction without using the clipboard or causing auto-scrolling issues.
+- **Buffer Synchronization Engine**: Completely rewrote the synchronization logic (`BufferSynthesizer`) to use a multi-anchor, case-insensitive, and cleaned matching strategy. This ensures logical 1:1 mapping between OCR positions and the exact text content from the terminal buffer, effectively eliminating OCR hallucinations (e.g., phantom bullets).
+- **Hybrid Capture Mode**: The app now intelligently combines Vision OCR (for spatial positioning) with Accessibility Data (for semantic accuracy).
+
+### Changed
+- **Sandboxing Disabled**: Removed App Sandbox (`ENABLE_APP_SANDBOX = NO`) to permit required Accessibility interactions with external terminal processes.
+- **Codebase Cleanup**: Removed unused legacy variables and aligned codebase with strict Swift compiler checks.
+
+### Fixed
+- **Ghostty Scrolling Bug**: Fixed the disruptive auto-scrolling caused by the previous clipboard-based fallback mechanism.
+- **OCR Artifacts**: Implemented strict pre-cleaning for OCR queries (stripping bullets `•` and noise) before matching against the buffer.
+
 ## [0.3.5] - 2026-01-19
 
 ### Added

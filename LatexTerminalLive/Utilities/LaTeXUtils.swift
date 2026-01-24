@@ -11,7 +11,8 @@ enum LaTeXUtils {
         "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Mu", "Nu", "Xi", "Omicron", "Pi", "Rho", "Sigma", "Tau", "Upsilon", "Phi", "Chi", "Psi", "Omega",
         "infty", "approx", "cdot", "times", "div", "pm", "mp", "neq", "leq", "geq", "sim", "equiv",
         "partial", "nabla", "forall", "exists", "in", "notin", "subset", "subseteq", "cup", "cap", "nothing", "emptyset",
-        "rightarrow", "Rightarrow", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow", "to", "mapsto", "implies", "iff", "impliedby",
+        "rightarrow", "Rightarrow", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow", "to", "mapsto", "implies", "iff", "impliedby", "ell",
+        "land", "lor", "neg", "wedge", "vee", "ni", "top", "bot",
         "left", "right", "begin", "end",
         "sin", "cos", "tan", "csc", "sec", "cot", "log", "ln", "exp", "lim", "sup", "inf", "max", "min",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
@@ -111,13 +112,14 @@ enum LaTeXUtils {
             }
         }
         
-        // 2. Repair \text with missing or malformed braces around units.
-        // Drops common OCR artifacts like 'f', 's', 'l' at the start of units (e.g. \text{ f}s} -> \text{ s}).
-        // Also ensures unit space behavior and handles superscripts (e.g. \text s}^{-1} -> \text{ s}^{-1}).
-        if let textUnitRegex = try? NSRegularExpression(pattern: "\\\\text\\s*\\{?\\s*(?:[fsl1]?\\s*)?([^{}\\s=<>]+)\\s*\\}?\\s*(\\^\\{?[^\\s\\}]+\\}?)?", options: []) {
+        // 2. Repair split \text commands (e.g. \text{ Impuls}vorher} -> \text{Impuls vorher})
+        // This handles cases where OCR misreads a space as a closing brace.
+        if let textSplitRegex = try? NSRegularExpression(pattern: #"\\text\s*\{\s*([^}]+)\}\s*([^}\s]+)\s*\}"#, options: .caseInsensitive) {
             let nsString = cleaned as NSString
-            cleaned = textUnitRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{ $1}$2")
+            cleaned = textSplitRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{$1 $2}")
         }
+
+        // 3. Repair \text with missing or malformed braces around units.
 
         // F. \frac Transition & Brace Fix
         // 1. Fixes common OCR artifacts inside or around \frac
@@ -158,7 +160,7 @@ enum LaTeXUtils {
         }
 
         // 4. Fixes "\frac{A}-{B}" -> "\frac{A}{B}"
-        if let fracSepRegex = try? NSRegularExpression(pattern: "([-])\\s*\\{", options: []) {
+        if let _ = try? NSRegularExpression(pattern: "([-])\\s*\\{", options: []) {
             if cleaned.contains("\\frac") {
                 cleaned = cleaned.replacingOccurrences(of: "-{", with: "}{")
                 cleaned = cleaned.replacingOccurrences(of: "- {", with: "}{")
@@ -173,18 +175,40 @@ enum LaTeXUtils {
         
         // 3. Advanced brace detection ('{' misread as 'ti', 'li', '!', etc.)
         // This is context-aware based on the command preceding it.
-        let braceRequired = ["frac", "sqrt", "text", "mathrm", "mathbf", "Delta", "delta", "sum", "int"]
+        let braceRequired = ["frac", "sqrt", "text", "mathrm", "mathbf", "Delta", "delta", "sum", "int", "overline", "underline", "hat", "tilde", "vec", "dot", "ddot"]
         for k in braceRequired {
-            // Check for \keyword followed by artifacts: ti, li, !!, !, 1, i, l, { |
-            let artifacts = ["ti", "li", "!!", "!", "1", "i", "l", "{|", "{l", "{i"]
+            // A. Specific Regex for brackets/parens: \cmd(text) -> \cmd{text}
+            // This prevents trailing artifacts like \cmd{text)
+            if ["overline", "underline", "hat", "tilde", "vec", "dot", "ddot", "sqrt", "text"].contains(k) {
+                let bracketPatterns = [("\\(", "\\)"), ("\\[", "\\]")]
+                for (open, close) in bracketPatterns {
+                    if let regex = try? NSRegularExpression(pattern: "\\\\\(k)\\s*\(open)(.*?)\(close)", options: []) {
+                        let nsString = cleaned as NSString
+                        cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\\(k){$1}")
+                    }
+                }
+            }
+
+            // B. General prefix replacement for other artifacts
+            let artifacts = ["ti", "li", "!!", "!", "1", "i", "l", "{|", "{l", "{i", "_", "{("]
             for a in artifacts {
                 cleaned = cleaned.replacingOccurrences(of: "\\\(k)\(a)", with: "\\\(k){")
                 cleaned = cleaned.replacingOccurrences(of: "\\\(k) \(a)", with: "\\\(k){")
             }
         }
         
+        // 3.5 Specific Logic fixes
+        // Fix \log -> \lor if surrounded by logic symbols or at common mistake positions
+        if cleaned.contains("\\log") {
+            let logicKeywords = ["\\land", "\\lor", "\\Land", "\\Lor", "\\neg", "P_", "M_"]
+            let hasLogicContext = logicKeywords.contains { cleaned.contains($0) }
+            if hasLogicContext {
+                cleaned = cleaned.replacingOccurrences(of: "\\log", with: "\\lor")
+            }
+        }
+        
         // 4. Ensure balanced braces
-        var openBraces = cleaned.filter { $0 == "{" }.count
+        let openBraces = cleaned.filter { $0 == "{" }.count
         var closeBraces = cleaned.filter { $0 == "}" }.count
         
         // If too many closing braces at the very end, remove them aggressively

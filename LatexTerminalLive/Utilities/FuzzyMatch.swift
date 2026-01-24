@@ -6,35 +6,31 @@ struct FuzzyMatch {
         let s1Count = s1.count
         let s2Count = s2.count
         
+        if abs(s1Count - s2Count) > 100 { return 101 } // Too different to matter for alignment
+        
         if s1Count == 0 { return s2Count }
         if s2Count == 0 { return s1Count }
         
-        // Convert to arrays for index access (Swift strings are not randomly accessible by int)
         let s1Chars = Array(s1)
         let s2Chars = Array(s2)
         
-        var matrix = [[Int]](repeating: [Int](repeating: 0, count: s2Count + 1), count: s1Count + 1)
-        
-        for i in 0...s1Count {
-            matrix[i][0] = i
-        }
-        
-        for j in 0...s2Count {
-            matrix[0][j] = j
-        }
+        var previousRow = [Int](0...s2Count)
+        var currentRow = [Int](repeating: 0, count: s2Count + 1)
         
         for i in 1...s1Count {
+            currentRow[0] = i
             for j in 1...s2Count {
                 let cost = (s1Chars[i - 1] == s2Chars[j - 1]) ? 0 : 1
-                matrix[i][j] = min(
-                    matrix[i - 1][j] + 1,       // Deletion
-                    matrix[i][j - 1] + 1,       // Insertion
-                    matrix[i - 1][j - 1] + cost // Substitution
+                currentRow[j] = min(
+                    previousRow[j] + 1,       // Deletion
+                    currentRow[j - 1] + 1,    // Insertion
+                    previousRow[j - 1] + cost // Substitution
                 )
             }
+            previousRow = currentRow
         }
         
-        return matrix[s1Count][s2Count]
+        return previousRow[s2Count]
     }
     
     /// Finds the closest match from a list of candidates.

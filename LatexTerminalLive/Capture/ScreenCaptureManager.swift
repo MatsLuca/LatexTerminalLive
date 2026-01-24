@@ -31,7 +31,6 @@ class ScreenCaptureManager: NSObject {
     private let ocr = VisionOCR()
     
     func captureGhosttyAndProcess(ignoreCache: Bool = false) async -> CaptureResult {
-        let defaultTheme = AppTheme(backgroundColor: .black, foregroundColor: .white)
         // print("DEBUG: captureGhostty() called")
         do {
             let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)

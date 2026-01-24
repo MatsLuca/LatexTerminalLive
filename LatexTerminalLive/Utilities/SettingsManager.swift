@@ -1,10 +1,19 @@
-import Foundation
-import SwiftUI
 import Combine
+import AppKit
+import SwiftUI
+
+enum CaptureMode: String, CaseIterable {
+    case ocr = "OCR Only"
+    case hybrid = "Hybrid (ULTRATHINK)"
+}
 
 class SettingsManager: ObservableObject {
     @Published var isLiveModeEnabled: Bool {
         didSet { UserDefaults.standard.set(isLiveModeEnabled, forKey: "isLiveModeEnabled") }
+    }
+    
+    @Published var captureMode: CaptureMode {
+        didSet { UserDefaults.standard.set(captureMode.rawValue, forKey: "captureMode") }
     }
     
     @Published var updateInterval: Double {
@@ -64,10 +73,13 @@ class SettingsManager: ObservableObject {
             "fontSize": 28.0,
             "useCustomColor": false,
             "latexColorHex": "#FFFFFF",
-            "showPerformanceStats": false
+            "showPerformanceStats": false,
+            "captureMode": CaptureMode.ocr.rawValue
         ])
         
         self.isLiveModeEnabled = UserDefaults.standard.bool(forKey: "isLiveModeEnabled")
+        let modeString = UserDefaults.standard.string(forKey: "captureMode") ?? CaptureMode.ocr.rawValue
+        self.captureMode = CaptureMode(rawValue: modeString) ?? .ocr
         self.updateInterval = UserDefaults.standard.double(forKey: "updateInterval")
         self.overlayOpacity = UserDefaults.standard.double(forKey: "overlayOpacity")
         self.fontSize = UserDefaults.standard.double(forKey: "fontSize")
