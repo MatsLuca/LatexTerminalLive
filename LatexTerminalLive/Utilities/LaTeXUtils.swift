@@ -16,7 +16,8 @@ enum LaTeXUtils {
         "left", "right", "begin", "end",
         "sin", "cos", "tan", "csc", "sec", "cot", "log", "ln", "exp", "lim", "sup", "inf", "max", "min",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
-        "hat", "bar", "vec", "dot", "ddot", "tilde", "ule", "underline", "overline"
+        "hat", "bar", "vec", "dot", "ddot", "tilde", "uline", "underline", "overline",
+        "dots", "ldots", "cdots", "vdots", "ddots"
     ]
 
     /// Heuristically cleans common OCR errors in LaTeX strings.
@@ -169,11 +170,11 @@ enum LaTeXUtils {
 
         // -------------------------------------
         
-        // 2. Fuzzy Command Correction
+        // 6. Fuzzy Command Correction
         // Detects words that look like commands but have typos or wrong prefixes.
         cleaned = correctFuzzyCommands(cleaned)
         
-        // 3. Advanced brace detection ('{' misread as 'ti', 'li', '!', etc.)
+        // 7. Advanced brace detection ('{' misread as 'ti', 'li', '!', etc.)
         // This is context-aware based on the command preceding it.
         let braceRequired = ["frac", "sqrt", "text", "mathrm", "mathbf", "Delta", "delta", "sum", "int", "overline", "underline", "hat", "tilde", "vec", "dot", "ddot"]
         for k in braceRequired {
@@ -197,7 +198,7 @@ enum LaTeXUtils {
             }
         }
         
-        // 3.5 Specific Logic fixes
+        // 7.5 Specific Logic fixes
         // Fix \log -> \lor if surrounded by logic symbols or at common mistake positions
         if cleaned.contains("\\log") {
             let logicKeywords = ["\\land", "\\lor", "\\Land", "\\Lor", "\\neg", "P_", "M_"]
@@ -207,7 +208,18 @@ enum LaTeXUtils {
             }
         }
         
-        // 4. Ensure balanced braces
+        // 8. Ellipsis repair: \dot -> \dots
+        // OCR often misreads '...' as '\dot'. We fix this if \dot is standalone or at the end.
+        if cleaned.contains("\\dot") {
+            // Regex matches \dot followed by = (if it was misinterpreted), space, end of string, 
+            // or common separators, BUT NOT an opening brace '{' (which would be a valid \dot{a}).
+            if let dotToDotsRegex = try? NSRegularExpression(pattern: #"\\dot(?!\s*\{)(?=\s*(=|\||\$|\s|$))"#, options: []) {
+                let nsString = cleaned as NSString
+                cleaned = dotToDotsRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\dots")
+            }
+        }
+        
+        // 9. Ensure balanced braces
         let openBraces = cleaned.filter { $0 == "{" }.count
         var closeBraces = cleaned.filter { $0 == "}" }.count
         
@@ -230,6 +242,57 @@ enum LaTeXUtils {
             cleaned += String(repeating: "}", count: openBraces - closeBraces)
         }
         
+        // --- FINAL GREEK REPAIR (runs after fuzzy matching) ---
+        
+        // 10. Case Consistency for Greek Letters
+        // Enforces that if both \lambda and \Lambda appear, they are unified to the majority case.
+        let greekLetterPairs = [
+            ("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma"), ("delta", "Delta"),
+            ("epsilon", "Epsilon"), ("zeta", "Zeta"), ("eta", "Eta"), ("theta", "Theta"),
+            ("iota", "Iota"), ("kappa", "Kappa"), ("lambda", "Lambda"), ("mu", "Mu"),
+            ("nu", "Nu"), ("xi", "Xi"), ("omicron", "Omicron"), ("pi", "Pi"),
+            ("rho", "Rho"), ("sigma", "Sigma"), ("tau", "Tau"), ("upsilon", "Upsilon"),
+            ("phi", "Phi"), ("chi", "Chi"), ("psi", "Psi"), ("omega", "Omega")
+        ]
+        
+        for (lower, upper) in greekLetterPairs {
+            let lowerCmd = "\\" + lower
+            let upperCmd = "\\" + upper
+            
+            let lowerCount = cleaned.components(separatedBy: lowerCmd).count - 1
+            let upperCount = cleaned.components(separatedBy: upperCmd).count - 1
+            
+            if lowerCount > 0 && upperCount > 0 {
+                if lowerCount >= upperCount {
+                    cleaned = cleaned.replacingOccurrences(of: upperCmd, with: lowerCmd)
+                } else {
+                    cleaned = cleaned.replacingOccurrences(of: lowerCmd, with: upperCmd)
+                }
+            } else if lowerCount == 0 && upperCount > 0 {
+                // --- NEW: Bias to lowercase for isolated symbols ---
+                // Specifically for Lambda, which is almost always a (lower) eigenvalue,
+                // stability indicator (lambda < 0), or polynomial factor (lambda + 1).
+                if upper == "Lambda" {
+                    // Check for context (index, operators)
+                    let biasPattern = #"\\Lambda\s*(?:_|\{|<|>|=|\\leq|\\geq|\\approx|\+|-|\*|\/|\))"#
+                    if let _ = cleaned.range(of: biasPattern, options: .regularExpression) {
+                        cleaned = cleaned.replacingOccurrences(of: upperCmd, with: lowerCmd)
+                    } else {
+                        // FALLBACK: If Lambda is COMPLETELY isolated in the block, bias to lowercase
+                        // (common in text like "Pole (\Lambda)").
+                        let stripped = cleaned.replacingOccurrences(of: "$", with: "").trimmingCharacters(in: .whitespaces)
+                        if stripped == upperCmd {
+                            cleaned = cleaned.replacingOccurrences(of: upperCmd, with: lowerCmd)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 11. Z-Prefix / Artifact Cleanup
+        cleaned = cleaned.replacingOccurrences(of: "\\Zambda", with: "\\lambda")
+        cleaned = cleaned.replacingOccurrences(of: "\\Zeta", with: "\\zeta")
+        
         if shouldLog {
             // print("[LaTeXUtils] Final:    \(cleaned)")
         }
@@ -247,9 +310,9 @@ enum LaTeXUtils {
         // But also, simply words that match a command very closely even without a prefix, 
         // IF they are long enough (avoids changing "sin" variable to "\sin" too aggressively, but in math block \sin is preferred).
         
-        // Regex: ([\\]|[|/lI1])?([a-zA-Z]{3,})
-        // Matches an optional prefix followed by at least 3 letters.
-        guard let regex = try? NSRegularExpression(pattern: "([\\\\]|[|/lI1])?([a-zA-Z]{3,})", options: []) else { return text }
+        // Regex: ([\\]|[|/lI1Z])?([a-zA-Z]{3,})
+        // Added 'Z' to potential backslash misinterpretations
+        guard let regex = try? NSRegularExpression(pattern: "([\\\\\\|/lI1Z])?([a-zA-Z]{3,})", options: []) else { return text }
         
         let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: length))
         

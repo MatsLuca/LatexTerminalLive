@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-01-25
+
+### Added
+- **Advanced LaTeX Heuristics**:
+    - **Greek Case Consistency**: New logic that unifies Greek letter case (e.g., `\Lambda` vs `\lambda`) based on majority appearance in the current block, with special bias for lowercase eigenvalues.
+    - **Ellipsis Repair**: Automatically converts standing-alone `\dot` misinterpreted as OCR noise into correct LaTeX `\dots`.
+    - **Z-Artifact Cleaning**: Added filters for common OCR "Z-prefixed" hallucinations (e.g., `\Zambda` -> `\lambda`, `\Zeta` -> `\zeta`).
+    - **Enhanced Fuzzy Matching**: Expanded `correctFuzzyCommands` to handle 'Z' misinterpretations as backslashes.
+
+### Changed
+- **Architectural Simplification**: Removed the experimental **Hybrid Capture Mode** and the `BufferSynthesizer` engine. The app now relies on high-fidelity silent Accessibility extraction and superior OCR heuristics, resulting in a cleaner, faster codebase.
+- **Settings UI**: Removed the Capture Mode picker; the app now defaults to the most robust and performant OCR-enhanced path.
+- **AutomationManager**: Simplified extraction logic by removing the clipboard-based fallback for Ghostty, effectively preventing accidental UI feedback/scrolling.
+
+### Removed
+- `BufferSynthesizer.swift`: Fully decommissioned the hybrid synchronization logic.
+
 ## [0.4.0] - 2026-01-21
 
 ### Added

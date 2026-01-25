@@ -4,7 +4,6 @@ import SwiftUI
 
 enum CaptureMode: String, CaseIterable {
     case ocr = "OCR Only"
-    case hybrid = "Hybrid (ULTRATHINK)"
 }
 
 class SettingsManager: ObservableObject {
@@ -79,7 +78,7 @@ class SettingsManager: ObservableObject {
         
         self.isLiveModeEnabled = UserDefaults.standard.bool(forKey: "isLiveModeEnabled")
         let modeString = UserDefaults.standard.string(forKey: "captureMode") ?? CaptureMode.ocr.rawValue
-        self.captureMode = CaptureMode(rawValue: modeString) ?? .ocr
+        self.captureMode = .ocr
         self.updateInterval = UserDefaults.standard.double(forKey: "updateInterval")
         self.overlayOpacity = UserDefaults.standard.double(forKey: "overlayOpacity")
         self.fontSize = UserDefaults.standard.double(forKey: "fontSize")

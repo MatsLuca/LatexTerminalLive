@@ -111,25 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isAutoUpdate && isManuallyHidden { return }
         let startTime = CFAbsoluteTimeGetCurrent()
         Task {
-            let ocrResult = await screenCaptureManager.captureGhosttyAndProcess(ignoreCache: ignoreCache)
-            let result: CaptureResult
-            
-            if settings.captureMode == .hybrid, 
-               case .success(let items, let frame, let windowID, let theme) = ocrResult {
-                
-                // ULTRATHINK: Synthesize OCR results with the high-fidelity buffer
-                if let buffer = await AutomationManager.shared.extractTextSilently() {
-                    let synthesizer = BufferSynthesizer()
-                    let synthesizedItems = synthesizer.synthesize(ocrItems: items, buffer: buffer)
-                    result = .success(items: synthesizedItems, frame: frame, windowID: windowID, theme: theme)
-                } else {
-                    result = ocrResult
-                }
-            } else if settings.captureMode == .ocr {
-                result = ocrResult
-            } else {
-                result = ocrResult
-            }
+            let result = await screenCaptureManager.captureGhosttyAndProcess(ignoreCache: ignoreCache)
             
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             

@@ -21,14 +21,6 @@ struct SettingsView: View {
                             Toggle("Auto-Update (Live)", isOn: $settings.isLiveModeEnabled)
                                 .toggleStyle(SwitchToggleStyle(tint: .blue))
                             
-                            Picker("Capture Mode", selection: $settings.captureMode) {
-                                ForEach(CaptureMode.allCases, id: \.self) { mode in
-                                    Text(mode.rawValue).tag(mode)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .padding(.vertical, 4)
-                            
                             if settings.isLiveModeEnabled {
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
@@ -50,15 +42,9 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .fontWeight(.semibold)
                                 
-                                if settings.captureMode == .ocr {
-                                    Text("OCR: Captures screen and uses AI to detect LaTeX. Fast, but prone to errors.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    Text("Hybrid: Combines OCR positioning with silent text extraction from the terminal buffer. Maximum accuracy + perfect positioning.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
+                                Text("OCR: Captures screen and uses AI to detect LaTeX. Optimized for speed and precision.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                             .padding(.top, 4)
                         }

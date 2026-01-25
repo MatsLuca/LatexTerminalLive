@@ -11,39 +11,17 @@ class AutomationManager {
     /// Note: Clipboard fallback is intentionally DISABLED for Ghostty to prevent auto-scrolling issues.
     func extractTextSilently() async -> String? {
         let startTime = CFAbsoluteTimeGetCurrent()
-        let frontApp = NSWorkspace.shared.frontmostApplication
-        let isGhostty = frontApp?.bundleIdentifier == "com.mitchellh.ghostty"
         
-        // 1. Try silent extraction via Accessibility API
+        // Try silent extraction via Accessibility API
         if let text = await extractViaAccessibility() {
             let duration = CFAbsoluteTimeGetCurrent() - startTime
-            // Only log if significant to reduce spam
             if duration > 0.1 {
                 print("[AutomationManager] AX Extraction success: \(text.count) chars in \(String(format: "%.3f", duration))s")
             }
             return text
         }
         
-        // 2. Fallback: Clipboard extraction
-        // CRITICAL: Disable for Ghostty to prevent scrolling bug.
-        // Also skip if we are the frontmost app (prevent self-capture loops).
-        if isGhostty {
-            print("[AutomationManager] AX Failed for Ghostty. Skipping Clipboard fallback to prevent scrolling.")
-            return nil
-        }
-        
-        if frontApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
-            return nil
-        }
-        
-        let result = await extractViaClipboardWithRestore()
-        let duration = CFAbsoluteTimeGetCurrent() - startTime
-        if let text = result {
-            print("[AutomationManager] Clipboard Fallback success: \(text.count) chars in \(String(format: "%.3f", duration))s")
-        } else {
-            print("[AutomationManager] All extraction methods failed in \(String(format: "%.3f", duration))s")
-        }
-        return result
+        return nil
     }
     
     private func extractViaAccessibility() async -> String? {
@@ -238,43 +216,5 @@ class AutomationManager {
         )
     }
     
-    private func extractViaClipboardWithRestore() async -> String? {
-        let pasteboard = NSPasteboard.general
-        let originalContent = pasteboard.string(forType: .string)
-        let changeCount = pasteboard.changeCount
-        
-        simulateCopy()
-        
-        var text: String?
-        for _ in 0..<3 { // Wait up to 150ms
-            if pasteboard.changeCount != changeCount {
-                text = pasteboard.string(forType: .string)
-                break
-            }
-            try? await Task.sleep(nanoseconds: 50_000_000)
-        }
-        
-        // Restore original state
-        if let original = originalContent {
-            pasteboard.clearContents()
-            pasteboard.setString(original, forType: .string)
-        } else {
-            pasteboard.clearContents()
-        }
-        
-        return text
-    }
-    
-    private func simulateCopy() {
-        let src = CGEventSource(stateID: .combinedSessionState)
-        let cmdDown = CGEvent(keyboardEventSource: src, virtualKey: 0x08, keyDown: true)
-        cmdDown?.flags = .maskCommand
-        let cmdUp = CGEvent(keyboardEventSource: src, virtualKey: 0x08, keyDown: false)
-        cmdUp?.flags = .maskCommand
-        
-        cmdDown?.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.01)
-        cmdUp?.post(tap: .cghidEventTap)
-    }
 }
 
