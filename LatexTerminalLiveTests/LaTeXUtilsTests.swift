@@ -38,7 +38,9 @@ final class LaTeXUtilsTests: XCTestCase {
         let input = "$x \\dot = 5$"
         let output = LaTeXUtils.cleanOCRLaTeX(input)
         XCTAssertTrue(output.contains("\\dots"))
-        XCTAssertFalse(output.contains("\\dot"))
+        // Verify \dot was replaced (not just checking if "dot" substring exists)
+        XCTAssertFalse(output.contains("\\dot "))
+        XCTAssertFalse(output.contains("\\dot="))
     }
 
     func testBraceBalancing() {

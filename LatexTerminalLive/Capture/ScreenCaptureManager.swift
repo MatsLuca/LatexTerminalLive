@@ -6,7 +6,24 @@ import SwiftUI
 enum CaptureResult {
     case success(items: [RecognizedTextItem], frame: CGRect, windowID: CGWindowID?, theme: AppTheme)
     case noChange
-    case failure
+    case failure(CaptureError)
+}
+
+enum CaptureError: Error, CustomStringConvertible {
+    case noWindowFound
+    case captureError(String)
+    case ocrError(String)
+
+    var description: String {
+        switch self {
+        case .noWindowFound:
+            return "No valid Ghostty window found"
+        case .captureError(let message):
+            return "Screen capture failed: \(message)"
+        case .ocrError(let message):
+            return "OCR processing failed: \(message)"
+        }
+    }
 }
 
 class ScreenCaptureManager: NSObject {
@@ -31,21 +48,21 @@ class ScreenCaptureManager: NSObject {
     private let ocr = VisionOCR()
     
     func captureGhosttyAndProcess(ignoreCache: Bool = false) async -> CaptureResult {
-        // print("DEBUG: captureGhostty() called")
+        DebugLog.capture("captureGhostty() called")
         do {
             let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             
             // Let's only log if we find a window
-            let allGhosttyWindows = content?.windows.filter { $0.owningApplication?.bundleIdentifier == "com.mitchellh.ghostty" } ?? []
+            let allGhosttyWindows = content?.windows.filter { $0.owningApplication?.bundleIdentifier == Constants.Terminal.bundleIdentifier } ?? []
 
             // Pick the window that is likely the active/visible one
             // SCK usually orders windows by Z-order (front to back)
-            guard let window = allGhosttyWindows.first(where: { $0.isOnScreen && $0.frame.width > 100 }) else {
-                return .failure
+            guard let window = allGhosttyWindows.first(where: { $0.isOnScreen && $0.frame.width > Constants.Geometry.minimumWindowWidth }) else {
+                return .failure(.noWindowFound)
             }
-            
-            // print("DEBUG Capture: Using Window ID \(window.windowID), Frame \(window.frame)")
+
             let windowID = window.windowID
+            DebugLog.capture("Using Window ID \(windowID), Frame \(window.frame)")
             
             // Find the screen the window is predominantly on to get its backing scale factor
             let windowCGRect = window.frame
@@ -55,7 +72,7 @@ class ScreenCaptureManager: NSObject {
             } ?? NSScreen.main ?? NSScreen.screens.first
             
             let scale = targetScreen?.backingScaleFactor ?? 2.0
-            // print("DEBUG Capture: Using scale factor \(scale) for screen \(targetScreen?.localizedName ?? "unknown")")
+            DebugLog.capture("Using scale factor \(scale) for screen \(targetScreen?.localizedName ?? "unknown")")
 
             let config = SCStreamConfiguration()
             config.width = Int(window.frame.width * scale)
@@ -74,7 +91,7 @@ class ScreenCaptureManager: NSObject {
             // Phase 1.5: Change Detection (Fingerprinting)
             let currentHash = calculateFingerprint(for: image)
             if !ignoreCache, let lastHash = lastContentHash, lastHash == currentHash {
-                // print("DEBUG Capture: No change detected, skipping OCR")
+                DebugLog.capture("No change detected, skipping OCR")
                 return .noChange
             }
             lastContentHash = currentHash
@@ -83,17 +100,18 @@ class ScreenCaptureManager: NSObject {
             let (items, theme) = try await ocr.recognizeText(in: image)
             
             return .success(items: items, frame: window.frame, windowID: windowID, theme: theme)
-            
+
         } catch {
-            print("DEBUG ERROR: Capture or OCR failed: \(error.localizedDescription)")
-            return .failure
+            let captureError = CaptureError.captureError(error.localizedDescription)
+            DebugLog.capture("ERROR: \(captureError)")
+            return .failure(captureError)
         }
     }
     
     /// Calculates a simple fingerprint by downscaling the image and hashing its pixel data.
     private func calculateFingerprint(for image: CGImage) -> Int {
-        let width = 16
-        let height = 16
+        let width = Constants.ImageProcessing.fingerprintWidth
+        let height = Constants.ImageProcessing.fingerprintHeight
         let colorSpace = CGColorSpaceCreateDeviceGray()
         
         guard let context = CGContext(

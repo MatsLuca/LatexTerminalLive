@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-01-28
+
+### Added
+- **Centralized Project Configuration**: Introduced `Constants.swift` to manage all app-wide settings, timing intervals, and geometry tolerances in one place.
+- **Categorized Debug System**: New `DebugLog.swift` provides a unified, category-based logging system (Capture, OCR, LaTeX, etc.) that can be toggled via environment variables.
+- **Improved Validation**: Added robust clamping and validation for live-mode update intervals in `SettingsManager`.
+- **Test Coverage**: Added `LaTeXDetectorTests.swift` to ensure regression testing for complex OCR scenarios.
+
+### Changed
+- **Performance Refactoring**: Upgraded `LaTeXUtils.swift` with regex caching and more efficient pattern matching, significantly reducing CPU overhead during continuous scanning.
+- **Refined Heuristics**: Improved German decimal comma repair and `\text` command logic for better handling of multi-word physics labels.
+- **Developer Experience**: Replaced all `print` calls with the new `DebugLog` system for a cleaner, production-ready console output.
+
 ## [0.5.0] - 2026-01-25
 
 ### Added

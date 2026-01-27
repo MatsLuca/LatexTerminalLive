@@ -20,11 +20,33 @@ enum LaTeXUtils {
         "dots", "ldots", "cdots", "vdots", "ddots"
     ]
 
+    // MARK: - Cached Regex Patterns
+
+    private static let looseEnvRegex: NSRegularExpression? = {
+        let environments = ["pmatrix", "bmatrix", "vmatrix", "matrix", "array", "align", "equation", "cases"]
+        let envPattern = environments.joined(separator: "|")
+        return try? NSRegularExpression(pattern: "\\\\(begin|end)\\s*[íli{(\\[]*\\s*(\(envPattern))\\s*[\\)}\\]í]*", options: .caseInsensitive)
+    }()
+
+    private static let decimalRegex = try? NSRegularExpression(pattern: "(\\d+?)([fsl1£]?)\\s*(?:,\\s*\\}?|\\{,\\}|\\{?,?\\s*\\}|\\{?,|\\{?,\\s*\\d*\\})\\s*[3]?(\\d+)", options: [])
+
+    private static let textSplitRegex = try? NSRegularExpression(pattern: #"\\text\s*\{\s*([^}]+)\}\s*([^}\s]+)\s*\}"#, options: .caseInsensitive)
+
+    private static let fracMissingOpenBrace = try? NSRegularExpression(pattern: "\\\\frac\\s*([^{}\\s][^\\}]*)\\}", options: [])
+
+    private static let fracTransitionRegex = try? NSRegularExpression(pattern: "(\\d)[1Il]\\s*\\{", options: [])
+
+    private static let dotToDotsRegex = try? NSRegularExpression(pattern: #"\\dot(?!\s*\{)(?=\s*(=|\||\$|\s|$))"#, options: [])
+
+    private static let fuzzyCommandRegex = try? NSRegularExpression(pattern: "([\\\\\\|/lI1Z])?([a-zA-Z]{3,})", options: [])
+
+    private static let lambdaBiasRegex = try? NSRegularExpression(pattern: #"\\Lambda\s*(?:_|\{|<|>|=|\\leq|\\geq|\\approx|\+|-|\*|\/|\))"#, options: [])
+
     /// Heuristically cleans common OCR errors in LaTeX strings.
     static func cleanOCRLaTeX(_ text: String) -> String {
-        let shouldLog = text != lastLoggedInput || Date().timeIntervalSince(lastLogTime) > 2.0
+        let shouldLog = text != lastLoggedInput || Date().timeIntervalSince(lastLogTime) > Constants.Timing.logDebounceInterval
         if shouldLog {
-            // print("[LaTeXUtils] Cleaning: \(text)")
+            DebugLog.latex("Cleaning: \(text)")
             lastLoggedInput = text
             lastLogTime = Date()
         }
@@ -60,21 +82,18 @@ enum LaTeXUtils {
         
         // C. General Environment Fix (Regex)
         // Catches variations like \end{ípmatrix}, \end[pmatrix], etc.
-        let environments = ["pmatrix", "bmatrix", "vmatrix", "matrix", "array", "align", "equation", "cases"]
-        let envPattern = environments.joined(separator: "|")
-        // Regex: \\(begin|end)\s*[íli{(\[]*\s*(env)\s*[)}\]í]*
-        if let looseEnvRegex = try? NSRegularExpression(pattern: "\\\\(begin|end)\\s*[íli{(\\[]*\\s*(\(envPattern))\\s*[\\)}\\]í]*", options: .caseInsensitive) {
+        if let regex = Self.looseEnvRegex {
             let nsString = cleaned as NSString
             let range = NSRange(location: 0, length: nsString.length)
-            cleaned = looseEnvRegex.stringByReplacingMatches(in: cleaned, options: [], range: range, withTemplate: "\\\\$1{$2}")
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: range, withTemplate: "\\\\$1{$2}")
         }
 
         // D. German Decimal Separator Fix
         // Fixes "16f,}6", "16, 6", "16{,} 6", "161,}6", "1{,366", "1£,}66" -> "16{,}6" (or equivalent)
         // Corrects artifacts where the last digit or symbol is actually the comma's tail.
-        if let decimalRegex = try? NSRegularExpression(pattern: "(\\d+?)([fsl1£]?)\\s*(?:,\\s*\\}?|\\{,\\}|\\{?,?\\s*\\}|\\{?,|\\{?,\\s*\\d*\\})\\s*[3]?(\\d+)", options: []) {
+        if let regex = Self.decimalRegex {
             let nsString = cleaned as NSString
-            cleaned = decimalRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1{,}$3")
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1{,}$3")
         }
         
         // E. ULTRATHINK: German Engineering Label & Unit Repair
@@ -115,9 +134,9 @@ enum LaTeXUtils {
         
         // 2. Repair split \text commands (e.g. \text{ Impuls}vorher} -> \text{Impuls vorher})
         // This handles cases where OCR misreads a space as a closing brace.
-        if let textSplitRegex = try? NSRegularExpression(pattern: #"\\text\s*\{\s*([^}]+)\}\s*([^}\s]+)\s*\}"#, options: .caseInsensitive) {
+        if let regex = Self.textSplitRegex {
             let nsString = cleaned as NSString
-            cleaned = textSplitRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{$1 $2}")
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\text{$1 $2}")
         }
 
         // 3. Repair \text with missing or malformed braces around units.
@@ -142,9 +161,9 @@ enum LaTeXUtils {
 
         // 2. Fixes missing opening brace before the transition: "\frac 33}{" -> "\frac{33}{"
         // Also handles "\frac -33}{" -> "\frac{-33}{"
-        if let fracMissingOpenBrace = try? NSRegularExpression(pattern: "\\\\frac\\s*([^{}\\s][^\\}]*)\\}", options: []) {
+        if let regex = Self.fracMissingOpenBrace {
             let nsString = cleaned as NSString
-            cleaned = fracMissingOpenBrace.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\frac{$1}")
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\frac{$1}")
         }
 
         // 3. Fixes malformed transitions between arguments: "01{10" -> "0}{10", "){" -> "}{"
@@ -155,9 +174,9 @@ enum LaTeXUtils {
             cleaned = cleaned.replacingOccurrences(of: "}(", with: "}{")
         }
         
-        if let fracTransitionRegex = try? NSRegularExpression(pattern: "(\\d)[1Il]\\s*\\{", options: []) {
+        if let regex = Self.fracTransitionRegex {
             let nsString = cleaned as NSString
-            cleaned = fracTransitionRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1}{")
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "$1}{")
         }
 
         // 4. Fixes "\frac{A}-{B}" -> "\frac{A}{B}"
@@ -210,13 +229,11 @@ enum LaTeXUtils {
         
         // 8. Ellipsis repair: \dot -> \dots
         // OCR often misreads '...' as '\dot'. We fix this if \dot is standalone or at the end.
-        if cleaned.contains("\\dot") {
-            // Regex matches \dot followed by = (if it was misinterpreted), space, end of string, 
+        if cleaned.contains("\\dot"), let regex = Self.dotToDotsRegex {
+            // Regex matches \dot followed by = (if it was misinterpreted), space, end of string,
             // or common separators, BUT NOT an opening brace '{' (which would be a valid \dot{a}).
-            if let dotToDotsRegex = try? NSRegularExpression(pattern: #"\\dot(?!\s*\{)(?=\s*(=|\||\$|\s|$))"#, options: []) {
-                let nsString = cleaned as NSString
-                cleaned = dotToDotsRegex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\dots")
-            }
+            let nsString = cleaned as NSString
+            cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: NSRange(location: 0, length: nsString.length), withTemplate: "\\\\dots")
         }
         
         // 9. Ensure balanced braces
@@ -274,8 +291,8 @@ enum LaTeXUtils {
                 // stability indicator (lambda < 0), or polynomial factor (lambda + 1).
                 if upper == "Lambda" {
                     // Check for context (index, operators)
-                    let biasPattern = #"\\Lambda\s*(?:_|\{|<|>|=|\\leq|\\geq|\\approx|\+|-|\*|\/|\))"#
-                    if let _ = cleaned.range(of: biasPattern, options: .regularExpression) {
+                    if let regex = Self.lambdaBiasRegex,
+                       regex.firstMatch(in: cleaned, options: [], range: NSRange(location: 0, length: (cleaned as NSString).length)) != nil {
                         cleaned = cleaned.replacingOccurrences(of: upperCmd, with: lowerCmd)
                     } else {
                         // FALLBACK: If Lambda is COMPLETELY isolated in the block, bias to lowercase
@@ -292,9 +309,9 @@ enum LaTeXUtils {
         // 11. Z-Prefix / Artifact Cleanup
         cleaned = cleaned.replacingOccurrences(of: "\\Zambda", with: "\\lambda")
         cleaned = cleaned.replacingOccurrences(of: "\\Zeta", with: "\\zeta")
-        
+
         if shouldLog {
-            // print("[LaTeXUtils] Final:    \(cleaned)")
+            DebugLog.latex("Final:    \(cleaned)")
         }
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -312,7 +329,7 @@ enum LaTeXUtils {
         
         // Regex: ([\\]|[|/lI1Z])?([a-zA-Z]{3,})
         // Added 'Z' to potential backslash misinterpretations
-        guard let regex = try? NSRegularExpression(pattern: "([\\\\\\|/lI1Z])?([a-zA-Z]{3,})", options: []) else { return text }
+        guard let regex = Self.fuzzyCommandRegex else { return text }
         
         let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: length))
         

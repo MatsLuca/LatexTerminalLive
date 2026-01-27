@@ -27,7 +27,7 @@ class OverlayViewModel: ObservableObject {
                            theme.foregroundColor != self.theme.foregroundColor
         
         if itemsChanged || themeChanged || self.windowFrame != frame {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.easeInOut(duration: Constants.UI.overlayAnimationDuration)) {
                 self.items = stabilizedItems
                 self.theme = theme
                 self.windowFrame = frame
@@ -36,14 +36,14 @@ class OverlayViewModel: ObservableObject {
     }
     
     func triggerCopiedFeedback(for id: UUID) {
-        withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+        withAnimation(.spring(response: Constants.UI.copyFeedbackDuration, dampingFraction: 0.6)) {
             self.copiedId = id
         }
-        
+
         // Auto-hide feedback after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.UI.copyFeedbackHideDelay) {
             if self.copiedId == id {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(.easeInOut(duration: Constants.UI.copyFeedbackFadeOutDuration)) {
                     self.copiedId = nil
                 }
             }

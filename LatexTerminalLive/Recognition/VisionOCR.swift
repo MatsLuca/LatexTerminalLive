@@ -14,7 +14,7 @@ struct MathFragment: Identifiable, Equatable {
     }
     
     static func == (lhs: MathFragment, rhs: MathFragment) -> Bool {
-        let coordTolerance: CGFloat = 0.002 // Allow minor OCR jitter
+        let coordTolerance = Constants.Geometry.coordinateTolerance
         return lhs.text == rhs.text &&
                abs(lhs.boundingBox.origin.x - rhs.boundingBox.origin.x) < coordTolerance &&
                abs(lhs.boundingBox.origin.y - rhs.boundingBox.origin.y) < coordTolerance &&
@@ -37,7 +37,7 @@ struct RecognizedTextItem: Identifiable, Equatable {
     }
     
     static func == (lhs: RecognizedTextItem, rhs: RecognizedTextItem) -> Bool {
-        let coordTolerance: CGFloat = 0.002
+        let coordTolerance = Constants.Geometry.coordinateTolerance
         return lhs.text == rhs.text &&
                lhs.mathFragments == rhs.mathFragments &&
                abs(lhs.boundingBox.origin.x - rhs.boundingBox.origin.x) < coordTolerance &&
@@ -99,8 +99,8 @@ class VisionOCR {
                 
                 if !mathSummaries.isEmpty {
                     let fullScene = mathSummaries.joined(separator: " | ")
-                    if fullScene != VisionOCR.lastLoggedText || Date().timeIntervalSince(VisionOCR.lastLogTime) > 3.0 {
-                        // print("[VisionOCR] Math Scene: \(fullScene)")
+                    if fullScene != VisionOCR.lastLoggedText || Date().timeIntervalSince(VisionOCR.lastLogTime) > Constants.Timing.logDebounceInterval {
+                        DebugLog.ocr("Math Scene: \(fullScene)")
                         VisionOCR.lastLoggedText = fullScene
                         VisionOCR.lastLogTime = Date()
                     }

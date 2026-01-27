@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		5A3648A22F297EC8001EFD9D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5A7993082F117450000FAA0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A79930F2F117450000FAA0F;
+			remoteInfo = LatexTerminalLive;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		5A36489E2F297EC8001EFD9D /* LatexTerminalLiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LatexTerminalLiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A7993102F117450000FAA0F /* LatexTerminalLive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LatexTerminalLive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -21,6 +32,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		5A36489F2F297EC8001EFD9D /* LatexTerminalLiveTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LatexTerminalLiveTests;
+			sourceTree = "<group>";
+		};
 		5A7993122F117450000FAA0F /* LatexTerminalLive */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -32,6 +48,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5A36489B2F297EC8001EFD9D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5A79930D2F117450000FAA0F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				5A7993122F117450000FAA0F /* LatexTerminalLive */,
+				5A36489F2F297EC8001EFD9D /* LatexTerminalLiveTests */,
 				5A7993112F117450000FAA0F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				5A7993102F117450000FAA0F /* LatexTerminalLive.app */,
+				5A36489E2F297EC8001EFD9D /* LatexTerminalLiveTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,6 +86,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5A36489D2F297EC8001EFD9D /* LatexTerminalLiveTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A3648A62F297EC8001EFD9D /* Build configuration list for PBXNativeTarget "LatexTerminalLiveTests" */;
+			buildPhases = (
+				5A36489A2F297EC8001EFD9D /* Sources */,
+				5A36489B2F297EC8001EFD9D /* Frameworks */,
+				5A36489C2F297EC8001EFD9D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5A3648A32F297EC8001EFD9D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5A36489F2F297EC8001EFD9D /* LatexTerminalLiveTests */,
+			);
+			name = LatexTerminalLiveTests;
+			packageProductDependencies = (
+			);
+			productName = LatexTerminalLiveTests;
+			productReference = 5A36489E2F297EC8001EFD9D /* LatexTerminalLiveTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		5A79930F2F117450000FAA0F /* LatexTerminalLive */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5A79931B2F117451000FAA0F /* Build configuration list for PBXNativeTarget "LatexTerminalLive" */;
@@ -93,6 +141,11 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					5A36489D2F297EC8001EFD9D = {
+						CreatedOnToolsVersion = 26.2;
+						LastSwiftMigration = 2620;
+						TestTargetID = 5A79930F2F117450000FAA0F;
+					};
 					5A79930F2F117450000FAA0F = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -113,11 +166,19 @@
 			projectRoot = "";
 			targets = (
 				5A79930F2F117450000FAA0F /* LatexTerminalLive */,
+				5A36489D2F297EC8001EFD9D /* LatexTerminalLiveTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		5A36489C2F297EC8001EFD9D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5A79930E2F117450000FAA0F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +189,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5A36489A2F297EC8001EFD9D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5A79930C2F117450000FAA0F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -137,7 +205,60 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		5A3648A32F297EC8001EFD9D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A79930F2F117450000FAA0F /* LatexTerminalLive */;
+			targetProxy = 5A3648A22F297EC8001EFD9D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		5A3648A42F297EC8001EFD9D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 74U49TS6SR;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mats.LatexTerminalLiveTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "LatexTerminalLiveTests/LatexTerminalLiveTests-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LatexTerminalLive.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LatexTerminalLive";
+			};
+			name = Debug;
+		};
+		5A3648A52F297EC8001EFD9D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 74U49TS6SR;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mats.LatexTerminalLiveTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "LatexTerminalLiveTests/LatexTerminalLiveTests-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LatexTerminalLive.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LatexTerminalLive";
+			};
+			name = Release;
+		};
 		5A7993192F117451000FAA0F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -349,6 +470,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5A3648A62F297EC8001EFD9D /* Build configuration list for PBXNativeTarget "LatexTerminalLiveTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A3648A42F297EC8001EFD9D /* Debug */,
+				5A3648A52F297EC8001EFD9D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		5A79930B2F117450000FAA0F /* Build configuration list for PBXProject "LatexTerminalLive" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

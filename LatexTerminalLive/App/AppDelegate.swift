@@ -19,7 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var mouseMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("🚀 [AppDelegate] Application Finished Launching - Sandbox Disabled")
+        DebugLog.log("🚀 Application Finished Launching - Sandbox Disabled", category: "AppDelegate")
         NSApp.setActivationPolicy(.accessory)
         setupStatusItem()
         checkAccessibilityPermissions()
@@ -53,7 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem?.button {
             if let customIcon = NSImage(named: "MenuBarIcon") {
                 customIcon.isTemplate = true
-                customIcon.size = NSSize(width: 18, height: 18)
+                customIcon.size = Constants.UI.menuBarIconSize
                 button.image = customIcon
             } else if let icon = NSImage(systemSymbolName: "sum", accessibilityDescription: "LatexTerminalLive") {
                 icon.isTemplate = true
@@ -65,7 +65,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "LatexTerminalLive v1.0", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "\(Constants.App.name) v\(Constants.App.version)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Force Capture", action: #selector(triggerManualCapture), keyEquivalent: "l"))
@@ -82,7 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let isTrusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
         if !isTrusted {
-            print("⚠️ WARNING: Global Hotkeys and Click-to-Copy will NOT work until you grant Accessibility permissions!")
+            DebugLog.log("⚠️ WARNING: Global Hotkeys and Click-to-Copy will NOT work until you grant Accessibility permissions!", category: "AppDelegate")
         }
     }
     
@@ -127,8 +127,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     
                 case .noChange:
                     break
-                    
-                case .failure:
+
+                case .failure(let error):
+                    DebugLog.log("Capture failed: \(error)", category: "AppDelegate")
                     // Optionally hide overlay on repeated failures?
                     break
                 }
@@ -138,7 +139,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func startTracking() {
         trackingTimer?.invalidate()
-        trackingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        trackingTimer = Timer.scheduledTimer(withTimeInterval: Constants.Timing.windowTrackingInterval, repeats: true) { [weak self] _ in
             self?.updateOverlayPosition()
         }
     }
@@ -163,7 +164,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     if overlay.frame != appKitFrame {
                         overlay.setFrame(appKitFrame, display: true)
                     }
-                    if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty" {
+                    if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Constants.Terminal.bundleIdentifier {
                         overlay.orderFrontRegardless()
                     }
                 }
@@ -227,7 +228,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func handleGlobalClick(_ event: NSEvent) {
         // 1. Only care if Ghostty is the active app and overlay is visible
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty",
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Constants.Terminal.bundleIdentifier,
               let overlay = overlayWindow, overlay.isVisible else { return }
         
         // 2. Get mouse location relative to the overlay window
@@ -277,6 +278,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Trigger visual feedback in the overlay
         overlayViewModel.triggerCopiedFeedback(for: id)
-        print("[AppDelegate] Copied correction prompt to clipboard: \(latex)")
+        DebugLog.log("Copied correction prompt to clipboard: \(latex)", category: "AppDelegate")
     }
 }

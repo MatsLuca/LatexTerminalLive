@@ -16,7 +16,12 @@ class SettingsManager: ObservableObject {
     }
     
     @Published var updateInterval: Double {
-        didSet { UserDefaults.standard.set(updateInterval, forKey: "updateInterval") }
+        didSet {
+            // Validate and clamp to safe range
+            updateInterval = max(Constants.Timing.minimumLiveModeInterval,
+                                min(Constants.Timing.maximumLiveModeInterval, updateInterval))
+            UserDefaults.standard.set(updateInterval, forKey: "updateInterval")
+        }
     }
     
     @Published var overlayOpacity: Double {
@@ -67,7 +72,7 @@ class SettingsManager: ObservableObject {
     init() {
         UserDefaults.standard.register(defaults: [
             "isLiveModeEnabled": false,
-            "updateInterval": 1.5,
+            "updateInterval": Constants.Timing.defaultLiveModeInterval,
             "overlayOpacity": 0.95,
             "fontSize": 28.0,
             "useCustomColor": false,

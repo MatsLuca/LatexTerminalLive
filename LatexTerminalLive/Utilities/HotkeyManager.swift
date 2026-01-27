@@ -13,16 +13,16 @@ class HotkeyManager {
     }
     
     private func setupMonitor() {
-        // print("DEBUG: Registering monitors for Cmd+Shift+L (Keycode 37)")
-        
+        DebugLog.hotkey("Registering monitors for Cmd+Shift+L (Keycode 37)")
+
         // Global monitor (when app is in background)
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.checkEvent(event, type: "Global")
         }
-        
+
         // Local monitor (when app is frontmost)
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // print("DEBUG: Local Key Event - Code: \(event.keyCode), Modifiers: \(event.modifierFlags)")
+            DebugLog.hotkey("Local Key Event - Code: \(event.keyCode), Modifiers: \(event.modifierFlags)")
             self?.checkEvent(event, type: "Local")
             return event
         }
@@ -30,19 +30,19 @@ class HotkeyManager {
     
     private func checkEvent(_ event: NSEvent, type: String) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // print("DEBUG: \(type) Key Down: \(event.keyCode), flags: \(flags)")
-        
+        DebugLog.hotkey("\(type) Key Down: \(event.keyCode), flags: \(flags)")
+
         // Cmd + Shift + L (KeyCode 37)
         if flags == [.command, .shift] && event.keyCode == 37 {
-            // print("DEBUG: Toggle Hotkey MATCHED (\(type))!")
+            DebugLog.hotkey("Toggle Hotkey MATCHED (\(type))!")
             onTrigger()
             return
         }
-        
+
         // Cmd + Option + , (KeyCode 43)
         // Changed from Shift to Option to avoid conflict with Ghostty/App Settings
         if flags == [.command, .option] && event.keyCode == 43 {
-            // print("DEBUG: Settings Hotkey MATCHED (\(type))!")
+            DebugLog.hotkey("Settings Hotkey MATCHED (\(type))!")
             onSettings()
             return
         }

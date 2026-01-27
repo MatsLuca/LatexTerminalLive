@@ -16,7 +16,7 @@ class AutomationManager {
         if let text = await extractViaAccessibility() {
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             if duration > 0.1 {
-                print("[AutomationManager] AX Extraction success: \(text.count) chars in \(String(format: "%.3f", duration))s")
+                DebugLog.automation("AX Extraction success: \(text.count) chars in \(String(format: "%.3f", duration))s")
             }
             return text
         }
@@ -31,23 +31,23 @@ class AutomationManager {
         let ghosttyApps = apps.filter { $0.bundleIdentifier?.contains("ghostty") == true || $0.localizedName?.lowercased().contains("ghostty") == true }
         
         if !ghosttyApps.isEmpty {
-            print("[AutomationManager] Found \(ghosttyApps.count) Ghostty process candidate(s):")
+            DebugLog.automation("Found \(ghosttyApps.count) Ghostty process candidate(s):")
             for app in ghosttyApps {
-                print(" - Name: \(app.localizedName ?? "?"), PID: \(app.processIdentifier), Bundle: \(app.bundleIdentifier ?? "?")")
+                DebugLog.automation(" - Name: \(app.localizedName ?? "?"), PID: \(app.processIdentifier), Bundle: \(app.bundleIdentifier ?? "?")")
             }
-            
+
             // Try each candidate
             for app in ghosttyApps {
-                print("[AutomationManager] Attempting extraction from PID \(app.processIdentifier)...")
+                DebugLog.automation("Attempting extraction from PID \(app.processIdentifier)...")
                 if let text = extractFromGhostty(app) {
-                    print("[AutomationManager] Success with PID \(app.processIdentifier)!")
+                    DebugLog.automation("Success with PID \(app.processIdentifier)!")
                     return text
                 }
             }
         }
-        
+
         // 2. Generic System-Wide Focused Element Fallback
-        print("[AutomationManager] Trying Generic System-Wide Fallback...")
+        DebugLog.automation("Trying Generic System-Wide Fallback...")
         var results: [String] = []
         let systemWide = AXUIElementCreateSystemWide()
         var focusedElement: AnyObject?
@@ -56,14 +56,14 @@ class AutomationManager {
         if res == .success {
             let element = focusedElement as! AXUIElement
             let info = getElementInfo(element)
-            print("[AutomationManager] Generic Fallback: Focused Element Role=\(info.role), Title='\(info.title ?? "")'")
+            DebugLog.automation("Generic Fallback: Focused Element Role=\(info.role), Title='\(info.title ?? "")'")
             collectTextElements(in: element, results: &results, depth: 0)
         } else {
-             print("[AutomationManager] Generic Fallback: Failed to get focused element (Error \(res.rawValue))")
+             DebugLog.automation("Generic Fallback: Failed to get focused element (Error \(res.rawValue))")
         }
-        
+
         if results.isEmpty {
-            print("[AutomationManager] Generic Fallback: No text results found.")
+            DebugLog.automation("Generic Fallback: No text results found.")
             return nil
         }
         
@@ -83,25 +83,25 @@ class AutomationManager {
         if AXUIElementCopyAttributeValue(appRef, kAXFocusedWindowAttribute as CFString, &focusedWindow) == .success {
             targetWindows.append(focusedWindow as! AXUIElement)
         } else {
-             print("[AutomationManager] Ghostty: No focused window found. Trying all windows...")
+             DebugLog.automation("Ghostty: No focused window found. Trying all windows...")
         }
-        
+
         // 2. If no focused window, try kAXWindowsAttribute
         var windowsRef: AnyObject?
         var axErr = AXUIElementCopyAttributeValue(appRef, kAXWindowsAttribute as CFString, &windowsRef)
-        
+
         // 3. Fallback: If kAXWindowsAttribute fails (e.g. -25204), try kAXChildren
         if axErr != .success {
-            print("[AutomationManager] Ghostty: kAXWindowsAttribute failed (\(axErr.rawValue)). Trying kAXChildrenAttribute...")
+            DebugLog.automation("Ghostty: kAXWindowsAttribute failed (\(axErr.rawValue)). Trying kAXChildrenAttribute...")
             axErr = AXUIElementCopyAttributeValue(appRef, kAXChildrenAttribute as CFString, &windowsRef)
         }
-        
+
         if axErr == .success, let children = windowsRef as? [AXUIElement] {
-            print("[AutomationManager] Ghostty: Found \(children.count) elements via Windows/Children fallback.")
-            
+            DebugLog.automation("Ghostty: Found \(children.count) elements via Windows/Children fallback.")
+
             for child in children {
                 // Determine if it's a window (for Children fallback) or just assume it is (for Windows attr)
-                let info = getElementInfo(child) 
+                let info = getElementInfo(child)
                 // Only consider Windows or StandardWindows
                 if info.role == "AXWindow" || info.role == "AXStandardWindow" {
                     if !targetWindows.contains(where: { $0 == child }) {
@@ -110,16 +110,16 @@ class AutomationManager {
                 }
             }
         } else {
-             print("[AutomationManager] Ghostty: Failed to get Windows or Children. Error: \(axErr.rawValue)")
+             DebugLog.automation("Ghostty: Failed to get Windows or Children. Error: \(axErr.rawValue)")
         }
-        
+
         if targetWindows.isEmpty {
-             print("[AutomationManager] Ghostty: No windows found at all (Focused or List).")
+             DebugLog.automation("Ghostty: No windows found at all (Focused or List).")
         }
-        
+
         // 4. Search in all target windows
         for (i, window) in targetWindows.enumerated() {
-             print("[AutomationManager] Searching Window \(i+1)...")
+             DebugLog.automation("Searching Window \(i+1)...")
             if let text = findTextAreaValue(in: window, depth: 0) {
                 return text
             }
@@ -135,18 +135,18 @@ class AutomationManager {
         
         // DEBUG: Specific Logging for Ghostty Traversal
         // Log everything to establish the tree structure
-        print("[AutomationManager] Traversing Ghostty: Depth=\(depth) Role=\(info.role) Title='\(info.title ?? "nil")'")
+        DebugLog.automation("Traversing Ghostty: Depth=\(depth) Role=\(info.role) Title='\(info.title ?? "nil")'")
         
         // Check if current node is the TextArea
         if info.role == "AXTextArea" {
             let text = info.value ?? ""
             // Only return if it has meaningful content
             if !text.isEmpty && !text.allSatisfy({ $0.isWhitespace }) {
-                // print("[AutomationManager] ✅ Found valid AXTextArea content (\(text.count) chars)")
-                // print("[AutomationManager] Content sample: \(text.prefix(100).replacingOccurrences(of: "\n", with: "\\n"))")
+                DebugLog.automation("✅ Found valid AXTextArea content (\(text.count) chars)")
+                DebugLog.automation("Content sample: \(text.prefix(100).replacingOccurrences(of: "\n", with: "\\n"))")
                 return text
             } else if info.value != nil {
-                 print("[AutomationManager] Found AXTextArea but it was empty/whitespace.")
+                 DebugLog.automation("Found AXTextArea but it was empty/whitespace.")
             }
         }
         
