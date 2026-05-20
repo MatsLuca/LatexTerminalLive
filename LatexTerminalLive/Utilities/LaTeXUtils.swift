@@ -14,8 +14,20 @@ enum LaTeXUtils {
         "rightarrow", "Rightarrow", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow", "to", "mapsto", "implies", "iff", "impliedby", "ell",
         "land", "lor", "neg", "wedge", "vee", "ni", "top", "bot",
         "left", "right", "begin", "end",
-        "sin", "cos", "tan", "csc", "sec", "cot", "log", "ln", "exp", "lim", "sup", "inf", "max", "min",
+        "sin", "cos", "tan", "csc", "sec", "cot", "log", "ln", "exp", "lim", "sup", "inf", "max", "min", "det",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
+        "hat", "bar", "vec", "dot", "ddot", "tilde", "uline", "underline", "overline",
+        "dots", "ldots", "cdots", "vdots", "ddots"
+    ]
+
+    // Highly specific math commands that are unique to LaTeX formulas and do not appear in normal text/code logs.
+    private static let highlySpecificMathCommands: Set<String> = [
+        "frac", "sqrt", "sum", "int", "prod", "coprod",
+        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega",
+        "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Mu", "Nu", "Xi", "Omicron", "Pi", "Rho", "Sigma", "Tau", "Upsilon", "Phi", "Chi", "Psi", "Omega",
+        "infty", "approx", "cdot", "times", "div", "pm", "mp", "neq", "leq", "geq", "sim", "equiv",
+        "partial", "nabla", "forall", "exists", "notin", "subset", "subseteq", "cup", "cap", "emptyset",
+        "rightarrow", "Rightarrow", "leftarrow", "Leftarrow", "leftrightarrow", "Leftrightarrow", "to", "mapsto", "implies", "iff", "impliedby",
         "hat", "bar", "vec", "dot", "ddot", "tilde", "uline", "underline", "overline",
         "dots", "ldots", "cdots", "vdots", "ddots"
     ]
@@ -75,17 +87,83 @@ enum LaTeXUtils {
         cleaned = cleaned.replacingOccurrences(of: "\\endípmatrix", with: "\\end{pmatrix}")
         cleaned = cleaned.replacingOccurrences(of: "\\begin{pmatrix)", with: "\\begin{pmatrix}")
         cleaned = cleaned.replacingOccurrences(of: "\\vec}", with: "\\vec{u}")
-        
-        // B. Fix Double Pipe as Newline in Matrices: "||" -> "\\"
-        // This is a very common OCR misinterpretation of the double backslash.
-        cleaned = cleaned.replacingOccurrences(of: "||", with: "\\\\")
-        
+
         // C. General Environment Fix (Regex)
         // Catches variations like \end{ípmatrix}, \end[pmatrix], etc.
+        // We run this first so that subsequent matrix heuristics have perfectly clean \begin{...} and \end{...} tags.
         if let regex = Self.looseEnvRegex {
             let nsString = cleaned as NSString
             let range = NSRange(location: 0, length: nsString.length)
             cleaned = regex.stringByReplacingMatches(in: cleaned, options: [], range: range, withTemplate: "\\\\$1{$2}")
+        }
+
+        // Direct matrix bracket environment repairs to fix OCR-destroyed begin/end tags
+        let matrixTypes = ["pmatrix", "bmatrix", "vmatrix", "matrix"]
+        for m in matrixTypes {
+            cleaned = cleaned.replacingOccurrences(of: "\\begin{\(m)}", with: "TEMP_BEGIN_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "\\end{\(m)}", with: "TEMP_END_\(m)")
+            
+            cleaned = cleaned.replacingOccurrences(of: "begin{\(m)}", with: "TEMP_BEGIN_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "egin{\(m)}", with: "TEMP_BEGIN_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "\\egin{\(m)}", with: "TEMP_BEGIN_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "b{\(m)}", with: "TEMP_BEGIN_\(m)")
+            
+            cleaned = cleaned.replacingOccurrences(of: "end{\(m)}", with: "TEMP_END_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "nd{\(m)}", with: "TEMP_END_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "\\nd{\(m)}", with: "TEMP_END_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "d{\(m)}", with: "TEMP_END_\(m)")
+            cleaned = cleaned.replacingOccurrences(of: "e{\(m)}", with: "TEMP_END_\(m)")
+            
+            cleaned = cleaned.replacingOccurrences(of: "TEMP_BEGIN_\(m)", with: "\\begin{\(m)}")
+            cleaned = cleaned.replacingOccurrences(of: "TEMP_END_\(m)", with: "\\end{\(m)}")
+        }
+
+        // Robust Matrix Newline Repair (Regex-basierte Isolierung)
+        // Findet alle Matrix-Blöcke und repariert deren Zeilentrenner (|, /, \\, ||, single \)
+        if let matrixRegex = try? NSRegularExpression(pattern: #"\\begin\{(pmatrix|bmatrix|vmatrix|matrix)\}(.*?)\\end\{\1\}"#, options: [.dotMatchesLineSeparators]) {
+            let nsString = cleaned as NSString
+            let range = NSRange(location: 0, length: nsString.length)
+            let matches = matrixRegex.matches(in: cleaned, options: [], range: range)
+            
+            // Wir arbeiten rückwärts, damit die Indizes beim Ersetzen von Zeichen nicht ungültig werden
+            for match in matches.reversed() {
+                guard match.numberOfRanges > 2 else { continue }
+                let contentRange = match.range(at: 2)
+                let originalContent = nsString.substring(with: contentRange)
+                
+                var repairedContent = originalContent
+                
+                // Ersetze Doppelte Pipes "||" durch "\\"
+                repairedContent = repairedContent.replacingOccurrences(of: "||", with: " \\\\ ")
+                
+                // Ersetze Pipe "|", Slash "/" optional von Leerzeichen umgeben durch "\\"
+                repairedContent = repairedContent.replacingOccurrences(of: " | ", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: " |", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: "| ", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: "|", with: " \\\\ ")
+                
+                repairedContent = repairedContent.replacingOccurrences(of: " / ", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: " /", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: "/ ", with: " \\\\ ")
+                repairedContent = repairedContent.replacingOccurrences(of: "/", with: " \\\\ ")
+                
+                // Einzelne Backslashes (z.B. " \ " oder "\") reparieren, falls sie nicht Teil von "\end" sind
+                let repNsString = repairedContent as NSString
+                if let singleBackslashRegex = try? NSRegularExpression(pattern: #"\s*\\(?!\s*end)(?!\s*\\)\s*"#, options: []) {
+                    repairedContent = singleBackslashRegex.stringByReplacingMatches(
+                        in: repairedContent,
+                        options: [],
+                        range: NSRange(location: 0, length: repNsString.length),
+                        withTemplate: " \\\\ "
+                    )
+                }
+                
+                // Eventuelle doppelte Zeilentrenner bereinigen
+                repairedContent = repairedContent.replacingOccurrences(of: "\\\\ \\\\", with: "\\\\")
+                repairedContent = repairedContent.replacingOccurrences(of: "\\\\  \\\\", with: "\\\\")
+                
+                cleaned = (cleaned as NSString).replacingCharacters(in: contentRange, with: repairedContent)
+            }
         }
 
         // D. German Decimal Separator Fix
@@ -362,6 +440,11 @@ enum LaTeXUtils {
             // 2. Determine fuzzy strategy
             // If prefix exists, we are confident it's a command -> allow standard looseness.
             // If NO prefix, we must be strict to avoid false positives (e.g. "Start" -> "\star").
+            // Also, to prevent normal words like "nun" or "nur" from matching short 2-letter commands like "nu",
+            // we strictly require words without a prefix to be at least 4 characters long.
+            if !hasPrefix && word.count < 4 {
+                continue
+            }
             
             var maxDist: Int = 1
             if hasPrefix {
@@ -369,8 +452,6 @@ enum LaTeXUtils {
                 maxDist = word.count <= 4 ? 1 : 2
             } else {
                 // Without prefix, ALWAYS strict (dist 1).
-                // "alpba" (5) vs "alpha" (5) -> dist 1. OK.
-                // "super" (5) vs "sup" (3) -> dist 2. REJECTED.
                 maxDist = 1
             }
             
@@ -397,5 +478,37 @@ enum LaTeXUtils {
         }
         
         return String(mutableNsString)
+    }
+    
+    /// Checks if the text contains a backslash followed by a known LaTeX command.
+    static func containsKnownLaTeXCommand(_ text: String) -> Bool {
+        let nsString = text as NSString
+        let range = NSRange(location: 0, length: nsString.length)
+        
+        for cmd in knownCommands {
+            let pattern = "\\\\\(cmd)(?![a-zA-Z])"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                if regex.firstMatch(in: text, options: [], range: range) != nil {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    /// Checks if the text contains a backslash followed by a highly specific math LaTeX command.
+    static func containsHighlySpecificLaTeXCommand(_ text: String) -> Bool {
+        let nsString = text as NSString
+        let range = NSRange(location: 0, length: nsString.length)
+        
+        for cmd in highlySpecificMathCommands {
+            let pattern = "\\\\\(cmd)(?![a-zA-Z])"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                if regex.firstMatch(in: text, options: [], range: range) != nil {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }

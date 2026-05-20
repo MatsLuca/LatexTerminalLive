@@ -72,17 +72,14 @@ class VisionOCR {
                     let segments = self.detector.segmentText(fullText)
                     var mathFragments: [MathFragment] = []
                     
-                    var currentIndex = 0
                     for segment in segments {
                         if segment.isMath {
                             let cleanedText = LaTeXUtils.cleanOCRLaTeX(segment.text)
-                            let nsRange = NSRange(location: currentIndex, length: segment.text.count)
-                            if let swiftRange = Range(nsRange, in: fullText),
+                            if let swiftRange = Range(segment.originalRange, in: fullText),
                                let box = try? topCandidate.boundingBox(for: swiftRange) {
                                 mathFragments.append(MathFragment(text: cleanedText, boundingBox: box.boundingBox))
                             }
                         }
-                        currentIndex += segment.text.count
                     }
                     
                     return RecognizedTextItem(

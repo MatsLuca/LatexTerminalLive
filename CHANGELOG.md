@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-20
+
+### Added
+- **Smarter Flow-Text Filter**: Introduced the `isFlowText` heuristic in `LaTeXDetector` to prevent normal prose containing mathematical citations (e.g. `\pm`, `\lambda`) from being implicitly wrapped and rendered as KaTeX (solving text compression issues).
+- **Offline KaTeX Integration**: Added local KaTeX resources (`katex.min.css`, `katex.min.js`, and fonts) to the app bundle to support completely offline rendering without relying on CDNs.
+- **Robust Matrix Reconstruction**: Implemented regex-based target area isolation for all matrix environments (`pmatrix`, `bmatrix`, etc.) to automatically repair malformed row delimiters (`|`, `/`, `\` -> `\\`).
+- **Exact Bounding Boxes**: Leveraged the new `originalRange` tracking in `LaTeXSegment` to compute pixel-perfect bounds, eliminating overlay shifting bugs.
+- **Comprehensive Unit Testing**: Added robust regression tests for implicit patching, flow-text detection, and decimal fixes in `LaTeXDetectorTests`.
+
+### Changed
+- **Tolerant Change Detection (Fingerprinting)**: Upgraded `ScreenCaptureManager` from raw hashes to pixel-based thumbnail comparison with custom threshold guards to ignore blinking terminal cursors and minor subpixel noise.
+
 ## [0.6.0] - 2026-01-28
 
 ### Added

@@ -40,8 +40,8 @@ struct MathView: NSViewRepresentable {
         <!DOCTYPE html>
         <html>
         <head>
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-            <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+            <link rel="stylesheet" href="katex.min.css">
+            <script src="katex.min.js"></script>
             <style>
                 body {
                     margin: 0;
@@ -91,7 +91,15 @@ struct MathView: NSViewRepresentable {
         </body>
         </html>
         """
-        nsView.loadHTMLString(html, baseURL: nil)
+        let baseURL: URL?
+        if let localKatexURL = Bundle.main.url(forResource: "katex", withExtension: nil, subdirectory: "Resources") {
+            baseURL = localKatexURL
+        } else if let generalKatexURL = Bundle.main.url(forResource: "katex", withExtension: nil) {
+            baseURL = generalKatexURL
+        } else {
+            baseURL = Bundle.main.resourceURL
+        }
+        nsView.loadHTMLString(html, baseURL: baseURL)
     }
     
     class Coordinator {

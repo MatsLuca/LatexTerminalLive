@@ -28,7 +28,7 @@ enum CaptureError: Error, CustomStringConvertible {
 
 class ScreenCaptureManager: NSObject {
     private let logger = Logger(subsystem: "com.antigravity.LatexTerminalLive", category: "Capture")
-    private var lastContentHash: Int?
+    private var lastFingerprintPixels: [UInt8]?
 
     func requestPermissions(completion: @escaping (Bool) -> Void) {
         // SCStream requires screen recording permissions.
@@ -89,12 +89,12 @@ class ScreenCaptureManager: NSObject {
             let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
             
             // Phase 1.5: Change Detection (Fingerprinting)
-            let currentHash = calculateFingerprint(for: image)
-            if !ignoreCache, let lastHash = lastContentHash, lastHash == currentHash {
-                DebugLog.capture("No change detected, skipping OCR")
+            let currentPixels = getFingerprintPixels(for: image)
+            if !ignoreCache, let lastPixels = lastFingerprintPixels, !hasSignificantChange(old: lastPixels, new: currentPixels) {
+                DebugLog.capture("No significant change detected, skipping OCR")
                 return .noChange
             }
-            lastContentHash = currentHash
+            lastFingerprintPixels = currentPixels
             
             // Phase 2: Run OCR
             let (items, theme) = try await ocr.recognizeText(in: image)
@@ -108,8 +108,8 @@ class ScreenCaptureManager: NSObject {
         }
     }
     
-    /// Calculates a simple fingerprint by downscaling the image and hashing its pixel data.
-    private func calculateFingerprint(for image: CGImage) -> Int {
+    /// Extracts grayscale pixel values (16x16) to be used for tolerant change detection.
+    private func getFingerprintPixels(for image: CGImage) -> [UInt8] {
         let width = Constants.ImageProcessing.fingerprintWidth
         let height = Constants.ImageProcessing.fingerprintHeight
         let colorSpace = CGColorSpaceCreateDeviceGray()
@@ -122,18 +122,52 @@ class ScreenCaptureManager: NSObject {
             bytesPerRow: width,
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return 0 }
+        ) else { return [] }
         
         context.interpolationQuality = .low
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         
-        guard let data = context.data else { return 0 }
+        guard let data = context.data else { return [] }
         let buffer = data.bindMemory(to: UInt8.self, capacity: width * height)
         
-        var hasher = Hasher()
+        var pixels = [UInt8](repeating: 0, count: width * height)
         for i in 0..<(width * height) {
-            hasher.combine(buffer[i])
+            pixels[i] = buffer[i]
         }
-        return hasher.finalize()
+        return pixels
+    }
+    
+    /// Compares two fingerprints with tolerance for minor localized changes (e.g. blinking cursor).
+    private func hasSignificantChange(old: [UInt8], new: [UInt8]) -> Bool {
+        guard old.count == new.count else { return true }
+        
+        var diffCount = 0
+        var totalAbsDiff = 0
+        
+        for i in 0..<old.count {
+            let diff = abs(Int(old[i]) - Int(new[i]))
+            if diff > 15 {
+                diffCount += 1
+            }
+            totalAbsDiff += diff
+        }
+        
+        let meanDiff = Double(totalAbsDiff) / Double(old.count)
+        
+        DebugLog.capture("Fingerprint change metrics: diffCount=\(diffCount), meanDiff=\(String(format: "%.2f", meanDiff))")
+        
+        // 1. Wenn sich nur extrem wenige Pixel signifikant geändert haben (z.B. <= 4 Pixel),
+        // betrachten wir das als blinkenden Cursor oder lokales Rauschen.
+        if diffCount <= 4 {
+            return false
+        }
+        
+        // 2. Wenn sich zwar viele Pixel minimal geändert haben, aber die durchschnittliche
+        // Änderung extrem klein ist, ignorieren wir das (Rauschen/Subpixel-Rendern).
+        if meanDiff < 1.5 {
+            return false
+        }
+        
+        return true
     }
 }

@@ -29,19 +29,85 @@ struct LaTeXSegment: Identifiable {
     let id = UUID()
     let text: String
     let isMath: Bool
+    let originalRange: NSRange
+    
+    init(text: String, isMath: Bool, originalRange: NSRange? = nil) {
+        self.text = text
+        self.isMath = isMath
+        self.originalRange = originalRange ?? NSRange(location: 0, length: (text as NSString).length)
+    }
 }
 
 class LaTeXDetector {
     
     /// Detects math patterns and returns true if the fragment contains any LaTeX.
     func containsLaTeX(_ text: String) -> Bool {
-        // Quick check for any potential delimiter
         return text.contains("$") || text.contains("\\[") || text.contains("\\(")
     }
     
     /// Splits a string into math and non-math segments using robust delimiter matching.
     func segmentText(_ text: String) -> [LaTeXSegment] {
         var segments: [LaTeXSegment] = []
+        
+        // Prüfen, ob wir implizites LaTeX vorliegen haben (keine Delimiter, aber hochgradig spezifische mathematische Kommandos oder Muster)
+        let hasDelimiters = text.contains("$") || text.contains("\\[") || text.contains("\\(")
+        let hasHighlySpecificCommand = LaTeXUtils.containsHighlySpecificLaTeXCommand(text)
+        let hasMathPatterns = text.contains("_{") || text.contains("^{")
+        
+        var shouldImplicitlyPatch = !hasDelimiters && (hasHighlySpecificCommand || hasMathPatterns)
+        
+        // Guard: Prevent normal sentences that happen to mention a LaTeX command (e.g. in explanations)
+        // from being implicitly patched. If there is no colon, a math expression should be relatively compact
+        // or contain math operators (=, +, -, etc.).
+        if shouldImplicitlyPatch {
+            let textToVerify: String
+            if let colonIndex = text.firstIndex(of: ":") {
+                textToVerify = String(text[text.index(after: colonIndex)...])
+            } else {
+                textToVerify = text
+            }
+            
+            if isFlowText(textToVerify) {
+                shouldImplicitlyPatch = false
+            } else if !text.contains(":") {
+                let spaceCount = text.filter { $0.isWhitespace }.count
+                let hasMathOperators = text.contains("=") || text.contains("+") || text.contains("-") || text.contains("*") || text.contains("/") || text.contains("<") || text.contains(">")
+                
+                if spaceCount > 3 && !hasMathOperators {
+                    shouldImplicitlyPatch = false
+                }
+            }
+        }
+        
+        if shouldImplicitlyPatch {
+            // Heuristik: Formel meistens nach Doppelpunkt (z.B. "Dezimalzahlen (Deutsch): p = 16,6 \pm 0,2 bar")
+            if let colonIndex = text.firstIndex(of: ":") {
+                let nsText = text as NSString
+                let colonOffset = text.distance(from: text.startIndex, to: colonIndex)
+                
+                let prefixText = String(text[..<colonIndex]) + ":"
+                let suffixText = String(text[text.index(after: colonIndex)...])
+                
+                let prefixRange = NSRange(location: 0, length: colonOffset + 1)
+                let suffixRange = NSRange(location: colonOffset + 1, length: nsText.length - (colonOffset + 1))
+                
+                // Wir fügen das Nicht-Math-Präfix hinzu
+                segments.append(LaTeXSegment(text: prefixText, isMath: false, originalRange: prefixRange))
+                
+                // Und das Math-Suffix (mit Delimitern geflickt für KaTeX/Detector, aber originalRange verweist auf das echte Suffix)
+                let trimmedSuffix = suffixText.trimmingCharacters(in: .whitespacesAndNewlines)
+                segments.append(LaTeXSegment(text: "$\(trimmedSuffix)$", isMath: true, originalRange: suffixRange))
+                
+                return segments
+            } else {
+                // Fallback: Gesamten Text umschließen
+                let nsText = text as NSString
+                let fullRange = NSRange(location: 0, length: nsText.length)
+                segments.append(LaTeXSegment(text: "$\(text.trimmingCharacters(in: .whitespacesAndNewlines))$", isMath: true, originalRange: fullRange))
+                return segments
+            }
+        }
+        
         let nsString = text as NSString
         var messageIndex = 0
         let length = nsString.length
@@ -52,7 +118,8 @@ class LaTeXDetector {
                 // No more math, add remaining text
                 let remaining = nsString.substring(from: messageIndex)
                 if !remaining.isEmpty {
-                    segments.append(LaTeXSegment(text: remaining, isMath: false))
+                    let range = NSRange(location: messageIndex, length: remaining.count)
+                    segments.append(LaTeXSegment(text: remaining, isMath: false, originalRange: range))
                 }
                 break
             }
@@ -60,30 +127,38 @@ class LaTeXDetector {
             // Add non-math text before the match
             if match.startIndex > messageIndex {
                 let prefix = nsString.substring(with: NSRange(location: messageIndex, length: match.startIndex - messageIndex))
-                segments.append(LaTeXSegment(text: prefix, isMath: false))
+                let range = NSRange(location: messageIndex, length: prefix.count)
+                segments.append(LaTeXSegment(text: prefix, isMath: false, originalRange: range))
             }
             
             // Try to find the matching closer
             if let endIndex = findClosingDelimiter(type: match.type, in: text, afterIndex: match.contentStartIndex) {
                 // Found a complete math block
-                // Include the delimiters in the math segment so KaTeX renders it (or strip if KaTeX expects plain content, 
-                // but usually preserving structure is safer, though MathView removes $ signals. 
-                // Let's pass the raw content including delimiters, and MathView can handle cleaning or we tell KaTeX to render.
-                // CURRENT MATHVIEW logic strips '$' manually. We should probably update MathView to handle other delimiters too.
-                // For now, let's extract the full block.
-                
                 let totalLength = endIndex - match.startIndex
                 let mathBlock = nsString.substring(with: NSRange(location: match.startIndex, length: totalLength))
-                segments.append(LaTeXSegment(text: mathBlock, isMath: true))
+                let range = NSRange(location: match.startIndex, length: totalLength)
+                segments.append(LaTeXSegment(text: mathBlock, isMath: true, originalRange: range))
                 
                 messageIndex = endIndex
             } else {
-                // No closer found, treat start delimiter as literal text
-                // Advance just past the start delimiter to avoid infinite loop
-                let delimiterLen = match.type.start.count
-                let literalText = nsString.substring(with: NSRange(location: match.startIndex, length: delimiterLen))
-                segments.append(LaTeXSegment(text: literalText, isMath: false))
-                messageIndex = match.startIndex + delimiterLen
+                // Kein schließender Delimiter gefunden!
+                // Prüfen, ob der verbleibende Text ab match.startIndex bekannte LaTeX-Kommandos oder mathematische Muster enthält.
+                let remainingText = nsString.substring(from: match.startIndex)
+                if LaTeXUtils.containsKnownLaTeXCommand(remainingText) || remainingText.contains("_{") || remainingText.contains("det(") {
+                    // Extrem tolerantes Flicken: Wir deklarieren den gesamten verbleibenden Text als Math-Segment
+                    // und hängen virtuell den schließenden Delimiter an, damit KaTeX es rendert.
+                    let mathBlock = remainingText + match.type.end
+                    let range = NSRange(location: match.startIndex, length: remainingText.count)
+                    segments.append(LaTeXSegment(text: mathBlock, isMath: true, originalRange: range))
+                    break // Da wir den gesamten Rest verbraucht haben
+                } else {
+                    // No closer found and no math context, treat start delimiter as literal text
+                    let delimiterLen = match.type.start.count
+                    let literalText = nsString.substring(with: NSRange(location: match.startIndex, length: delimiterLen))
+                    let range = NSRange(location: match.startIndex, length: delimiterLen)
+                    segments.append(LaTeXSegment(text: literalText, isMath: false, originalRange: range))
+                    messageIndex = match.startIndex + delimiterLen
+                }
             }
         }
         
@@ -103,21 +178,10 @@ class LaTeXDetector {
         let nsString = text as NSString
         let validRange = NSRange(location: startIndex, length: nsString.length - startIndex)
         
-        // We look for all delimiters and pick the earliest one.
-        // Priority: $$ > $ (longest match first for greedy starts), but position matters most.
-        // Actually, if we see "$$", it is definitely DoubleDollar, not two Dollars.
-        // If we see "$...", it is Dollar.
-        
         var bestMatch: StartMatch? = nil
-        
         let delimiters: [LaTeXDelimiterType] = [.doubleDollar, .bracket, .parenthesis, .dollar]
         
         for type in delimiters {
-             _ = NSRegularExpression.escapedPattern(for: type.start)
-            // We implement manual search to handle escaping correctly? 
-            // Regex is easier for "find next occurrence".
-            // Let's use simple search but check for escaping.
-            
             var searchRange = validRange
             while searchRange.length > 0 {
                 let foundRange = nsString.range(of: type.start, options: [], range: searchRange)
@@ -127,37 +191,26 @@ class LaTeXDetector {
                 
                 // Check if escaped (e.g. "\$")
                 if isEscaped(index: foundRange.location, in: text) {
-                    // It is escaped, so finding the next one
                     let newLocation = foundRange.location + foundRange.length
                     searchRange = NSRange(location: newLocation, length: nsString.length - newLocation)
                     continue
                 }
                 
-                // It is a candidate
                 // Special case: If we found '$', check if it is actually part of '$$'
                 if type == .dollar {
-                    // If the character immediately following is '$', then this is a '$$' start, 
-                    // which should have been caught by .doubleDollar loop.
-                    // However, we process bestMatch by *index*.
                     if foundRange.location + 1 < nsString.length && nsString.substring(with: NSRange(location: foundRange.location, length: 2)) == "$$" {
-                        // This is a double dollar. Ignore this match in the .dollar loop.
-                        // The .doubleDollar loop will (or has) catch it.
-                        // We just break this inner while since we want to find a single dollar, and this spot is occupied.
-                        // Actually, we should keep searching for a single dollar later in the string.
                         let newLocation = foundRange.location + 2
                         searchRange = NSRange(location: newLocation, length: nsString.length - newLocation)
                         continue
                     }
                 }
                 
-                // If we are here, we found a valid start for this type.
                 let candidate = StartMatch(type: type, startIndex: foundRange.location, contentStartIndex: foundRange.location + foundRange.length)
                 
-                // If this is earlier than current best match, take it.
                 if bestMatch == nil || candidate.startIndex < bestMatch!.startIndex {
                     bestMatch = candidate
                 }
-                break // Found the first valid one of this type, move to next type
+                break
             }
         }
         
@@ -166,10 +219,8 @@ class LaTeXDetector {
     
     private func findClosingDelimiter(type: LaTeXDelimiterType, in text: String, afterIndex: Int) -> Int? {
         let nsString = text as NSString
-        // Search for the end delimiter starting after the start delimiter
-        // We must skip escaped ones.
-        
         var searchIndex = afterIndex
+        
         while searchIndex < nsString.length {
             let searchRange = NSRange(location: searchIndex, length: nsString.length - searchIndex)
             let foundRange = nsString.range(of: type.end, options: [], range: searchRange)
@@ -184,7 +235,6 @@ class LaTeXDetector {
                 continue
             }
             
-            // Found it! return the index AFTER the delimiter (exclusive end index)
             return foundRange.location + foundRange.length
         }
         
@@ -194,7 +244,6 @@ class LaTeXDetector {
     private func isEscaped(index: Int, in text: String) -> Bool {
         guard index > 0 else { return false }
         let nsString = text as NSString
-        // Check number of backslashes before index
         var backslashCount = 0
         var i = index - 1
         while i >= 0 {
@@ -205,7 +254,6 @@ class LaTeXDetector {
                 break
             }
         }
-        // Odd number of backslashes means the character at `index` is escaped
         return backslashCount % 2 != 0
     }
     
@@ -213,8 +261,11 @@ class LaTeXDetector {
         var merged: [LaTeXSegment] = []
         for segment in segments {
             if let last = merged.last, !last.isMath, !segment.isMath {
-                // Merge two non-math segments
-                let newSegment = LaTeXSegment(text: last.text + segment.text, isMath: false)
+                let combinedRange = NSRange(
+                    location: last.originalRange.location,
+                    length: last.originalRange.length + segment.originalRange.length
+                )
+                let newSegment = LaTeXSegment(text: last.text + segment.text, isMath: false, originalRange: combinedRange)
                 merged.removeLast()
                 merged.append(newSegment)
             } else {
@@ -222,5 +273,43 @@ class LaTeXDetector {
             }
         }
         return merged
+    }
+    
+    private func isFlowText(_ text: String) -> Bool {
+        // Trenne den Text in reine Buchstaben-Sequenzen
+        let words = text.components(separatedBy: CharacterSet.letters.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        var flowTextWordCount = 0
+        
+        let excludedWords: Set<String> = [
+            // Bekannte LaTeX-Befehle und Funktionen
+            "frac", "sqrt", "sum", "int", "prod", "coprod",
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega",
+            "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Mu", "Nu", "Xi", "Omicron", "Pi", "Rho", "Sigma", "Tau", "Upsilon", "Phi", "Chi", "Psi", "Omega",
+            "infty", "approx", "cdot", "times", "div", "pm", "mp", "neq", "leq", "geq", "sim", "equiv",
+            "partial", "nabla", "forall", "exists", "notin", "subset", "subseteq", "cup", "cap", "emptyset",
+            "sin", "cos", "tan", "csc", "sec", "cot", "log", "ln", "exp", "lim", "sup", "inf", "max", "min", "det",
+            "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
+            
+            // Gängige physikalische Einheiten und Bezeichner (Deutsch/Englisch)
+            "volt", "watt", "ampere", "kelvin", "joule", "pascal", "bar", "grad", "celsius", "meter", "gramm", "kilo", "liter", "hertz", "newton", "tesla", "henry", "farad",
+            "const", "constant", "true", "false", "step", "null", "void", "rad", "deg", "var", "cov", "std", "sgn", "dim", "ker", "img", "pdf", "cdf"
+        ]
+        
+        for word in words {
+            let lowerWord = word.lowercased()
+            
+            // Ein Fließtext-Wort muss:
+            // 1. Mindestens 3 Zeichen lang sein (um kurze Wörter wie "ist", "ein", "und", "für", "wie" zu erfassen)
+            // 2. Nicht in der Ausschlussliste von mathematischen/physikalischen Begriffen liegen
+            if word.count >= 3 && !excludedWords.contains(lowerWord) {
+                flowTextWordCount += 1
+            }
+        }
+        
+        // Wenn wir mehr als 1 typisches Fließtext-Wort finden (also mindestens 2), deklarieren wir es als Fließtext.
+        return flowTextWordCount > 1
     }
 }

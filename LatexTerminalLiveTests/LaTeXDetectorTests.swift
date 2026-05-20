@@ -98,4 +98,35 @@ final class LaTeXDetectorTests: XCTestCase {
         XCTAssertEqual(segments[1].text, "$\\frac{1}{2}$")
         XCTAssertTrue(segments[1].isMath)
     }
+
+    func testFlowTextImplicitPatchExclusion() {
+        // Normaler deutscher Fließtext, der ein mathematisches Zeichen als Zitat/Beispiel enthält
+        let input = "3. Echte mathematische Formeln (wie p = 16,6 \\pm 0,2 bar oder det(A - \\lambda I) = 0) werden weiterhin vollautomatisch im Hintergrund erkannt und als LaTeX gerendert!"
+        let segments = detector.segmentText(input)
+        
+        // Sollte nicht als ein einziges großes Math-Segment gepatcht werden!
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertFalse(segments[0].isMath)
+        XCTAssertEqual(segments[0].text, input)
+    }
+
+    func testMathImplicitPatchInclusion() {
+        // Reine mathematische Ausdrücke ohne Delimiter
+        let input1 = "det(A - \\lambda I) = 0"
+        let segments1 = detector.segmentText(input1)
+        
+        XCTAssertEqual(segments1.count, 1)
+        XCTAssertTrue(segments1[0].isMath)
+        XCTAssertEqual(segments1[0].text, "$\(input1)$")
+        
+        // Echter mathematischer Ausdruck mit Doppelpunkt-Präfix
+        let input2 = "Dezimalzahlen (Deutsch): p = 16,6 \\pm 0,2 bar"
+        let segments2 = detector.segmentText(input2)
+        
+        XCTAssertEqual(segments2.count, 2)
+        XCTAssertFalse(segments2[0].isMath)
+        XCTAssertEqual(segments2[0].text, "Dezimalzahlen (Deutsch):")
+        XCTAssertTrue(segments2[1].isMath)
+        XCTAssertEqual(segments2[1].text, "$p = 16,6 \\pm 0,2 bar$")
+    }
 }
